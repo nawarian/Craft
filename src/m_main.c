@@ -748,263 +748,6 @@ void dirty_chunk(Chunk *chunk) {
     }
 }
 
-void occlusion(
-    char neighbors[27], char lights[27], float shades[27],
-    float ao[6][4], float light[6][4])
-{
-    static const int lookup3[6][4][3] = {
-        {{0, 1, 3}, {2, 1, 5}, {6, 3, 7}, {8, 5, 7}},
-        {{18, 19, 21}, {20, 19, 23}, {24, 21, 25}, {26, 23, 25}},
-        {{6, 7, 15}, {8, 7, 17}, {24, 15, 25}, {26, 17, 25}},
-        {{0, 1, 9}, {2, 1, 11}, {18, 9, 19}, {20, 11, 19}},
-        {{0, 3, 9}, {6, 3, 15}, {18, 9, 21}, {24, 15, 21}},
-        {{2, 5, 11}, {8, 5, 17}, {20, 11, 23}, {26, 17, 23}}
-    };
-   static const int lookup4[6][4][4] = {
-        {{0, 1, 3, 4}, {1, 2, 4, 5}, {3, 4, 6, 7}, {4, 5, 7, 8}},
-        {{18, 19, 21, 22}, {19, 20, 22, 23}, {21, 22, 24, 25}, {22, 23, 25, 26}},
-        {{6, 7, 15, 16}, {7, 8, 16, 17}, {15, 16, 24, 25}, {16, 17, 25, 26}},
-        {{0, 1, 9, 10}, {1, 2, 10, 11}, {9, 10, 18, 19}, {10, 11, 19, 20}},
-        {{0, 3, 9, 12}, {3, 6, 12, 15}, {9, 12, 18, 21}, {12, 15, 21, 24}},
-        {{2, 5, 11, 14}, {5, 8, 14, 17}, {11, 14, 20, 23}, {14, 17, 23, 26}}
-    };
-    static const float curve[4] = {0.0, 0.25, 0.5, 0.75};
-    for (int i = 0; i < 6; i++) {
-        for (int j = 0; j < 4; j++) {
-            int corner = neighbors[lookup3[i][j][0]];
-            int side1 = neighbors[lookup3[i][j][1]];
-            int side2 = neighbors[lookup3[i][j][2]];
-            int value = side1 && side2 ? 3 : corner + side1 + side2;
-            float shade_sum = 0;
-            float light_sum = 0;
-            int is_light = lights[13] == 15;
-            for (int k = 0; k < 4; k++) {
-                shade_sum += shades[lookup4[i][j][k]];
-                light_sum += lights[lookup4[i][j][k]];
-            }
-            if (is_light) {
-                light_sum = 15 * 4 * 10;
-            }
-            float total = curve[value] + shade_sum / 4.0;
-            ao[i][j] = MIN(total, 1.0);
-            light[i][j] = light_sum / 15.0 / 4.0;
-        }
-    }
-}
-
-#define XZ_SIZE (CHUNK_SIZE * 3 + 2)
-#define XZ_LO (CHUNK_SIZE)
-#define XZ_HI (CHUNK_SIZE * 2 + 1)
-#define Y_SIZE 258
-#define XYZ(x, y, z) ((y) * XZ_SIZE * XZ_SIZE + (x) * XZ_SIZE + (z))
-#define XZ(x, z) ((x) * XZ_SIZE + (z))
-
-void light_fill(
-    char *opaque, char *light,
-    int x, int y, int z, int w, int force)
-{
-    if (x + w < XZ_LO || z + w < XZ_LO) {
-        return;
-    }
-    if (x - w > XZ_HI || z - w > XZ_HI) {
-        return;
-    }
-    if (y < 0 || y >= Y_SIZE) {
-        return;
-    }
-    if (light[XYZ(x, y, z)] >= w) {
-        return;
-    }
-    if (!force && opaque[XYZ(x, y, z)]) {
-        return;
-    }
-    light[XYZ(x, y, z)] = w--;
-    light_fill(opaque, light, x - 1, y, z, w, 0);
-    light_fill(opaque, light, x + 1, y, z, w, 0);
-    light_fill(opaque, light, x, y - 1, z, w, 0);
-    light_fill(opaque, light, x, y + 1, z, w, 0);
-    light_fill(opaque, light, x, y, z - 1, w, 0);
-    light_fill(opaque, light, x, y, z + 1, w, 0);
-}
-
-void compute_chunk(WorkerItem *item) {
-    char *opaque = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
-    char *light = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
-    char *highest = (char *)calloc(XZ_SIZE * XZ_SIZE, sizeof(char));
-
-    int ox = item->p * CHUNK_SIZE - CHUNK_SIZE - 1;
-    int oy = -1;
-    int oz = item->q * CHUNK_SIZE - CHUNK_SIZE - 1;
-
-    // check for lights
-    int has_light = 0;
-    if (SHOW_LIGHTS) {
-        for (int a = 0; a < 3; a++) {
-            for (int b = 0; b < 3; b++) {
-                Map *map = item->light_maps[a][b];
-                if (map && map->size) {
-                    has_light = 1;
-                }
-            }
-        }
-    }
-
-    // populate opaque array
-    for (int a = 0; a < 3; a++) {
-        for (int b = 0; b < 3; b++) {
-            Map *map = item->block_maps[a][b];
-            if (!map) {
-                continue;
-            }
-            MAP_FOR_EACH(map, ex, ey, ez, ew) {
-                int x = ex - ox;
-                int y = ey - oy;
-                int z = ez - oz;
-                int w = ew;
-                // TODO: this should be unnecessary
-                if (x < 0 || y < 0 || z < 0) {
-                    continue;
-                }
-                if (x >= XZ_SIZE || y >= Y_SIZE || z >= XZ_SIZE) {
-                    continue;
-                }
-                // END TODO
-                opaque[XYZ(x, y, z)] = !g_item_is_transparent(w);
-                if (opaque[XYZ(x, y, z)]) {
-                    highest[XZ(x, z)] = MAX(highest[XZ(x, z)], y);
-                }
-            } END_MAP_FOR_EACH;
-        }
-    }
-
-    // flood fill light intensities
-    if (has_light) {
-        for (int a = 0; a < 3; a++) {
-            for (int b = 0; b < 3; b++) {
-                Map *map = item->light_maps[a][b];
-                if (!map) {
-                    continue;
-                }
-                MAP_FOR_EACH(map, ex, ey, ez, ew) {
-                    int x = ex - ox;
-                    int y = ey - oy;
-                    int z = ez - oz;
-                    light_fill(opaque, light, x, y, z, ew, 1);
-                } END_MAP_FOR_EACH;
-            }
-        }
-    }
-
-    Map *map = item->block_maps[1][1];
-
-    // count exposed faces
-    int miny = 256;
-    int maxy = 0;
-    int faces = 0;
-    MAP_FOR_EACH(map, ex, ey, ez, ew) {
-        if (ew <= 0) {
-            continue;
-        }
-        int x = ex - ox;
-        int y = ey - oy;
-        int z = ez - oz;
-        int f1 = !opaque[XYZ(x - 1, y, z)];
-        int f2 = !opaque[XYZ(x + 1, y, z)];
-        int f3 = !opaque[XYZ(x, y + 1, z)];
-        int f4 = !opaque[XYZ(x, y - 1, z)] && (ey > 0);
-        int f5 = !opaque[XYZ(x, y, z - 1)];
-        int f6 = !opaque[XYZ(x, y, z + 1)];
-        int total = f1 + f2 + f3 + f4 + f5 + f6;
-        if (total == 0) {
-            continue;
-        }
-        if (g_item_is_plant(ew)) {
-            total = 4;
-        }
-        miny = MIN(miny, ey);
-        maxy = MAX(maxy, ey);
-        faces += total;
-    } END_MAP_FOR_EACH;
-
-    // generate geometry
-    GLfloat *data = m_util_faces_malloc(10, faces);
-    int offset = 0;
-    MAP_FOR_EACH(map, ex, ey, ez, ew) {
-        if (ew <= 0) {
-            continue;
-        }
-        int x = ex - ox;
-        int y = ey - oy;
-        int z = ez - oz;
-        int f1 = !opaque[XYZ(x - 1, y, z)];
-        int f2 = !opaque[XYZ(x + 1, y, z)];
-        int f3 = !opaque[XYZ(x, y + 1, z)];
-        int f4 = !opaque[XYZ(x, y - 1, z)] && (ey > 0);
-        int f5 = !opaque[XYZ(x, y, z - 1)];
-        int f6 = !opaque[XYZ(x, y, z + 1)];
-        int total = f1 + f2 + f3 + f4 + f5 + f6;
-        if (total == 0) {
-            continue;
-        }
-        char neighbors[27] = {0};
-        char lights[27] = {0};
-        float shades[27] = {0};
-        int index = 0;
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    neighbors[index] = opaque[XYZ(x + dx, y + dy, z + dz)];
-                    lights[index] = light[XYZ(x + dx, y + dy, z + dz)];
-                    shades[index] = 0;
-                    if (y + dy <= highest[XZ(x + dx, z + dz)]) {
-                        for (int oy = 0; oy < 8; oy++) {
-                            if (opaque[XYZ(x + dx, y + dy + oy, z + dz)]) {
-                                shades[index] = 1.0 - oy * 0.125;
-                                break;
-                            }
-                        }
-                    }
-                    index++;
-                }
-            }
-        }
-        float ao[6][4];
-        float light[6][4];
-        occlusion(neighbors, lights, shades, ao, light);
-        if (g_item_is_plant(ew)) {
-            total = 4;
-            float min_ao = 1;
-            float max_light = 0;
-            for (int a = 0; a < 6; a++) {
-                for (int b = 0; b < 4; b++) {
-                    min_ao = MIN(min_ao, ao[a][b]);
-                    max_light = MAX(max_light, light[a][b]);
-                }
-            }
-            float rotation = simplex2(ex, ez, 4, 0.5, 2) * 360;
-            g_cube_make_plant(
-                data + offset, min_ao, max_light,
-                ex, ey, ez, 0.5, ew, rotation);
-        }
-        else {
-            g_cube_make_cube(
-                data + offset, ao, light,
-                f1, f2, f3, f4, f5, f6,
-                ex, ey, ez, 0.5, ew);
-        }
-        offset += total * 60;
-    } END_MAP_FOR_EACH;
-
-    free(opaque);
-    free(light);
-    free(highest);
-
-    item->miny = miny;
-    item->maxy = maxy;
-    item->faces = faces;
-    item->data = data;
-}
-
 void generate_chunk(Chunk *chunk, WorkerItem *item) {
     chunk->miny = item->miny;
     chunk->maxy = item->maxy;
@@ -1035,7 +778,7 @@ void gen_chunk_buffer(Chunk *chunk) {
             }
         }
     }
-    compute_chunk(item);
+    m_game_compute_chunk(item);
     generate_chunk(chunk, item);
     chunk->dirty = 0;
 }
@@ -1045,15 +788,6 @@ void p_map_set_func(int x, int y, int z, int w, void *arg) {
     p_map_set(map, x, y, z, w);
 }
 
-void load_chunk(WorkerItem *item) {
-    int p = item->p;
-    int q = item->q;
-    Map *block_map = item->block_maps[1][1];
-    Map *light_map = item->light_maps[1][1];
-    p_world_create(p, q, p_map_set_func, block_map);
-    d_db_load_blocks(block_map, p, q);
-    d_db_load_lights(light_map, p, q);
-}
 
 void request_chunk(int p, int q) {
     int key = d_db_get_key(p, q);
@@ -1089,7 +823,7 @@ void create_chunk(Chunk *chunk, int p, int q) {
     item->q = chunk->q;
     item->block_maps[1][1] = &chunk->map;
     item->light_maps[1][1] = &chunk->lights;
-    load_chunk(item);
+    m_game_load_chunk(item);
 
     request_chunk(p, q);
 }
@@ -1298,27 +1032,6 @@ void ensure_chunks(Player *player) {
         }
         mtx_unlock(&worker->mtx);
     }
-}
-
-int worker_run(void *arg) {
-    Worker *worker = (Worker *)arg;
-    int running = 1;
-    while (running) {
-        mtx_lock(&worker->mtx);
-        while (worker->state != WORKER_BUSY) {
-            cnd_wait(&worker->cnd, &worker->mtx);
-        }
-        mtx_unlock(&worker->mtx);
-        WorkerItem *item = &worker->item;
-        if (item->load) {
-            load_chunk(item);
-        }
-        compute_chunk(item);
-        mtx_lock(&worker->mtx);
-        worker->state = WORKER_DONE;
-        mtx_unlock(&worker->mtx);
-    }
-    return 0;
 }
 
 void unset_sign(int x, int y, int z) {
@@ -2441,6 +2154,18 @@ void reset_model() {
 }
 
 int main(int argc, char **argv) {
+    // CHECK COMMAND LINE ARGUMENTS //
+    if (argc == 2 || argc == 3) {
+        g->mode = MODE_ONLINE;
+        strncpy(g->server_addr, argv[1], MAX_ADDR_LENGTH);
+        g->server_port = argc == 3 ? atoi(argv[2]) : DEFAULT_PORT;
+        snprintf(g->d_db_path, MAX_PATH_LENGTH,
+            "cache.%s.%d.db", g->server_addr, g->server_port);
+    } else {
+        g->mode = MODE_OFFLINE;
+        snprintf(g->d_db_path, MAX_PATH_LENGTH, "%s", DB_PATH);
+    }
+
     // @todo -> Move callbacks to m_game instead of passing here
     int init = m_game_init(
         &model,
@@ -2501,34 +2226,6 @@ int main(int argc, char **argv) {
     sky_attrib.matrix = glGetUniformLocation(program, "matrix");
     sky_attrib.sampler = glGetUniformLocation(program, "sampler");
     sky_attrib.timer = glGetUniformLocation(program, "timer");
-
-    // CHECK COMMAND LINE ARGUMENTS //
-    if (argc == 2 || argc == 3) {
-        g->mode = MODE_ONLINE;
-        strncpy(g->server_addr, argv[1], MAX_ADDR_LENGTH);
-        g->server_port = argc == 3 ? atoi(argv[2]) : DEFAULT_PORT;
-        snprintf(g->d_db_path, MAX_PATH_LENGTH,
-            "cache.%s.%d.db", g->server_addr, g->server_port);
-    }
-    else {
-        g->mode = MODE_OFFLINE;
-        snprintf(g->d_db_path, MAX_PATH_LENGTH, "%s", DB_PATH);
-    }
-
-    g->create_radius = CREATE_CHUNK_RADIUS;
-    g->render_radius = RENDER_CHUNK_RADIUS;
-    g->delete_radius = DELETE_CHUNK_RADIUS;
-    g->sign_radius = RENDER_SIGN_RADIUS;
-
-    // INITIALIZE WORKER THREADS
-    for (int i = 0; i < WORKERS; i++) {
-        Worker *worker = g->workers + i;
-        worker->index = i;
-        worker->state = WORKER_IDLE;
-        mtx_init(&worker->mtx, mtx_plain);
-        cnd_init(&worker->cnd);
-        thrd_create(&worker->thrd, worker_run, worker);
-    }
 
     // OUTER LOOP //
     int running = 1;

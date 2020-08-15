@@ -143,6 +143,10 @@ typedef struct {
     Block copy1;
 } Model;
 
+void m_game_compute_chunk(WorkerItem *item);
+
+void m_game_load_chunk(WorkerItem *item);
+
 int m_game_init(
     Model *model,
     void* callback_on_key,
