@@ -4,7 +4,7 @@
 #include "sqlite3.h"
 #include "tinycthread.h"
 
-static int db_enabled = 0;
+static int db_is_enabled = 0;
 
 static sqlite3 *db;
 static sqlite3_stmt *insert_block_stmt;
@@ -24,20 +24,20 @@ static mtx_t mtx;
 static cnd_t cnd;
 static mtx_t load_mtx;
 
-void db_enable() {
-    db_enabled = 1;
+void d_db_enable() {
+    db_is_enabled = 1;
 }
 
-void db_disable() {
-    db_enabled = 0;
+void d_db_disable() {
+    db_is_enabled = 0;
 }
 
-int get_db_enabled() {
-    return db_enabled;
+int d_db_is_enabled() {
+    return db_is_enabled;
 }
 
-int db_init(char *path) {
-    if (!db_enabled) {
+int d_db_init(char *path) {
+    if (!db_is_enabled) {
         return 0;
     }
     static const char *create_query =
@@ -146,15 +146,15 @@ int db_init(char *path) {
     rc = sqlite3_prepare_v2(db, set_key_query, -1, &set_key_stmt, NULL);
     if (rc) return rc;
     sqlite3_exec(db, "begin;", NULL, NULL, NULL);
-    db_worker_start();
+    d_db_worker_start();
     return 0;
 }
 
-void db_close() {
-    if (!db_enabled) {
+void d_db_close() {
+    if (!db_is_enabled) {
         return;
     }
-    db_worker_stop();
+    d_db_worker_stop();
     sqlite3_exec(db, "commit;", NULL, NULL, NULL);
     sqlite3_finalize(insert_block_stmt);
     sqlite3_finalize(insert_light_stmt);
@@ -169,22 +169,22 @@ void db_close() {
     sqlite3_close(db);
 }
 
-void db_commit() {
-    if (!db_enabled) {
+void d_db_commit() {
+    if (!db_is_enabled) {
         return;
     }
     mtx_lock(&mtx);
-    ring_put_commit(&ring);
+    d_ring_put_commit(&ring);
     cnd_signal(&cnd);
     mtx_unlock(&mtx);
 }
 
-void _db_commit() {
+void _d_db_commit() {
     sqlite3_exec(db, "commit; begin;", NULL, NULL, NULL);
 }
 
-void db_auth_set(char *username, char *identity_token) {
-    if (!db_enabled) {
+void d_db_auth_set(char *username, char *identity_token) {
+    if (!db_is_enabled) {
         return;
     }
     static const char *query =
@@ -197,14 +197,14 @@ void db_auth_set(char *username, char *identity_token) {
     sqlite3_bind_int(stmt, 3, 1);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
-    db_auth_select(username);
+    d_db_auth_select(username);
 }
 
-int db_auth_select(char *username) {
-    if (!db_enabled) {
+int d_db_auth_select(char *username) {
+    if (!db_is_enabled) {
         return 0;
     }
-    db_auth_select_none();
+    d_db_auth_select_none();
     static const char *query =
         "update auth.identity_token set selected = 1 where username = ?;";
     sqlite3_stmt *stmt;
@@ -215,19 +215,19 @@ int db_auth_select(char *username) {
     return sqlite3_changes(db);
 }
 
-void db_auth_select_none() {
-    if (!db_enabled) {
+void d_db_auth_select_none() {
+    if (!db_is_enabled) {
         return;
     }
     sqlite3_exec(db, "update auth.identity_token set selected = 0;",
         NULL, NULL, NULL);
 }
 
-int db_auth_get(
+int d_db_auth_get(
     char *username,
     char *identity_token, int identity_token_length)
 {
-    if (!db_enabled) {
+    if (!db_is_enabled) {
         return 0;
     }
     static const char *query =
@@ -247,11 +247,11 @@ int db_auth_get(
     return result;
 }
 
-int db_auth_get_selected(
+int d_db_auth_get_selected(
     char *username, int username_length,
     char *identity_token, int identity_token_length)
 {
-    if (!db_enabled) {
+    if (!db_is_enabled) {
         return 0;
     }
     static const char *query =
@@ -273,8 +273,8 @@ int db_auth_get_selected(
     return result;
 }
 
-void db_save_state(float x, float y, float z, float rx, float ry) {
-    if (!db_enabled) {
+void d_db_save_state(float x, float y, float z, float rx, float ry) {
+    if (!db_is_enabled) {
         return;
     }
     static const char *query =
@@ -291,8 +291,8 @@ void db_save_state(float x, float y, float z, float rx, float ry) {
     sqlite3_finalize(stmt);
 }
 
-int db_load_state(float *x, float *y, float *z, float *rx, float *ry) {
-    if (!db_enabled) {
+int d_db_load_state(float *x, float *y, float *z, float *rx, float *ry) {
+    if (!db_is_enabled) {
         return 0;
     }
     static const char *query =
@@ -312,17 +312,17 @@ int db_load_state(float *x, float *y, float *z, float *rx, float *ry) {
     return result;
 }
 
-void db_insert_block(int p, int q, int x, int y, int z, int w) {
-    if (!db_enabled) {
+void d_db_insert_block(int p, int q, int x, int y, int z, int w) {
+    if (!db_is_enabled) {
         return;
     }
     mtx_lock(&mtx);
-    ring_put_block(&ring, p, q, x, y, z, w);
+    d_ring_put_block(&ring, p, q, x, y, z, w);
     cnd_signal(&cnd);
     mtx_unlock(&mtx);
 }
 
-void _db_insert_block(int p, int q, int x, int y, int z, int w) {
+void _d_db_insert_block(int p, int q, int x, int y, int z, int w) {
     sqlite3_reset(insert_block_stmt);
     sqlite3_bind_int(insert_block_stmt, 1, p);
     sqlite3_bind_int(insert_block_stmt, 2, q);
@@ -333,17 +333,17 @@ void _db_insert_block(int p, int q, int x, int y, int z, int w) {
     sqlite3_step(insert_block_stmt);
 }
 
-void db_insert_light(int p, int q, int x, int y, int z, int w) {
-    if (!db_enabled) {
+void d_db_insert_light(int p, int q, int x, int y, int z, int w) {
+    if (!db_is_enabled) {
         return;
     }
     mtx_lock(&mtx);
-    ring_put_light(&ring, p, q, x, y, z, w);
+    d_ring_put_light(&ring, p, q, x, y, z, w);
     cnd_signal(&cnd);
     mtx_unlock(&mtx);
 }
 
-void _db_insert_light(int p, int q, int x, int y, int z, int w) {
+void _d_db_insert_light(int p, int q, int x, int y, int z, int w) {
     sqlite3_reset(insert_light_stmt);
     sqlite3_bind_int(insert_light_stmt, 1, p);
     sqlite3_bind_int(insert_light_stmt, 2, q);
@@ -354,10 +354,10 @@ void _db_insert_light(int p, int q, int x, int y, int z, int w) {
     sqlite3_step(insert_light_stmt);
 }
 
-void db_insert_sign(
+void d_db_insert_sign(
     int p, int q, int x, int y, int z, int face, const char *text)
 {
-    if (!db_enabled) {
+    if (!db_is_enabled) {
         return;
     }
     sqlite3_reset(insert_sign_stmt);
@@ -371,8 +371,8 @@ void db_insert_sign(
     sqlite3_step(insert_sign_stmt);
 }
 
-void db_delete_sign(int x, int y, int z, int face) {
-    if (!db_enabled) {
+void d_db_delete_sign(int x, int y, int z, int face) {
+    if (!db_is_enabled) {
         return;
     }
     sqlite3_reset(delete_sign_stmt);
@@ -383,8 +383,8 @@ void db_delete_sign(int x, int y, int z, int face) {
     sqlite3_step(delete_sign_stmt);
 }
 
-void db_delete_signs(int x, int y, int z) {
-    if (!db_enabled) {
+void d_db_delete_signs(int x, int y, int z) {
+    if (!db_is_enabled) {
         return;
     }
     sqlite3_reset(delete_signs_stmt);
@@ -394,15 +394,15 @@ void db_delete_signs(int x, int y, int z) {
     sqlite3_step(delete_signs_stmt);
 }
 
-void db_delete_all_signs() {
-    if (!db_enabled) {
+void d_db_delete_all_signs() {
+    if (!db_is_enabled) {
         return;
     }
     sqlite3_exec(db, "delete from sign;", NULL, NULL, NULL);
 }
 
-void db_load_blocks(Map *map, int p, int q) {
-    if (!db_enabled) {
+void d_db_load_blocks(Map *map, int p, int q) {
+    if (!db_is_enabled) {
         return;
     }
     mtx_lock(&load_mtx);
@@ -419,8 +419,8 @@ void db_load_blocks(Map *map, int p, int q) {
     mtx_unlock(&load_mtx);
 }
 
-void db_load_lights(Map *map, int p, int q) {
-    if (!db_enabled) {
+void d_db_load_lights(Map *map, int p, int q) {
+    if (!db_is_enabled) {
         return;
     }
     mtx_lock(&load_mtx);
@@ -437,8 +437,8 @@ void db_load_lights(Map *map, int p, int q) {
     mtx_unlock(&load_mtx);
 }
 
-void db_load_signs(SignList *list, int p, int q) {
-    if (!db_enabled) {
+void d_db_load_signs(SignList *list, int p, int q) {
+    if (!db_is_enabled) {
         return;
     }
     sqlite3_reset(load_signs_stmt);
@@ -451,12 +451,12 @@ void db_load_signs(SignList *list, int p, int q) {
         int face = sqlite3_column_int(load_signs_stmt, 3);
         const char *text = (const char *)sqlite3_column_text(
             load_signs_stmt, 4);
-        sign_list_add(list, x, y, z, face, text);
+        g_sign_list_add(list, x, y, z, face, text);
     }
 }
 
-int db_get_key(int p, int q) {
-    if (!db_enabled) {
+int d_db_get_key(int p, int q) {
+    if (!db_is_enabled) {
         return 0;
     }
     sqlite3_reset(get_key_stmt);
@@ -468,17 +468,17 @@ int db_get_key(int p, int q) {
     return 0;
 }
 
-void db_set_key(int p, int q, int key) {
-    if (!db_enabled) {
+void d_db_set_key(int p, int q, int key) {
+    if (!db_is_enabled) {
         return;
     }
     mtx_lock(&mtx);
-    ring_put_key(&ring, p, q, key);
+    d_ring_put_key(&ring, p, q, key);
     cnd_signal(&cnd);
     mtx_unlock(&mtx);
 }
 
-void _db_set_key(int p, int q, int key) {
+void _d_db_set_key(int p, int q, int key) {
     sqlite3_reset(set_key_stmt);
     sqlite3_bind_int(set_key_stmt, 1, p);
     sqlite3_bind_int(set_key_stmt, 2, q);
@@ -486,53 +486,53 @@ void _db_set_key(int p, int q, int key) {
     sqlite3_step(set_key_stmt);
 }
 
-void db_worker_start(char *path) {
-    if (!db_enabled) {
+void d_db_worker_start(char *path) {
+    if (!db_is_enabled) {
         return;
     }
-    ring_alloc(&ring, 1024);
+    d_ring_alloc(&ring, 1024);
     mtx_init(&mtx, mtx_plain);
     mtx_init(&load_mtx, mtx_plain);
     cnd_init(&cnd);
-    thrd_create(&thrd, db_worker_run, path);
+    thrd_create(&thrd, d_db_worker_run, path);
 }
 
-void db_worker_stop() {
-    if (!db_enabled) {
+void d_db_worker_stop() {
+    if (!db_is_enabled) {
         return;
     }
     mtx_lock(&mtx);
-    ring_put_exit(&ring);
+    d_ring_put_exit(&ring);
     cnd_signal(&cnd);
     mtx_unlock(&mtx);
     thrd_join(thrd, NULL);
     cnd_destroy(&cnd);
     mtx_destroy(&load_mtx);
     mtx_destroy(&mtx);
-    ring_free(&ring);
+    d_ring_free(&ring);
 }
 
-int db_worker_run(void *arg) {
+int d_db_worker_run(void *arg) {
     int running = 1;
     while (running) {
         RingEntry e;
         mtx_lock(&mtx);
-        while (!ring_get(&ring, &e)) {
+        while (!d_ring_get(&ring, &e)) {
             cnd_wait(&cnd, &mtx);
         }
         mtx_unlock(&mtx);
         switch (e.type) {
             case BLOCK:
-                _db_insert_block(e.p, e.q, e.x, e.y, e.z, e.w);
+                _d_db_insert_block(e.p, e.q, e.x, e.y, e.z, e.w);
                 break;
             case LIGHT:
-                _db_insert_light(e.p, e.q, e.x, e.y, e.z, e.w);
+                _d_db_insert_light(e.p, e.q, e.x, e.y, e.z, e.w);
                 break;
             case KEY:
-                _db_set_key(e.p, e.q, e.key);
+                _d_db_set_key(e.p, e.q, e.key);
                 break;
             case COMMIT:
-                _db_commit();
+                _d_db_commit();
                 break;
             case EXIT:
                 running = 0;

@@ -4,7 +4,7 @@
 #include "g_matrix.h"
 #include "m_util.h"
 
-void cube_make_faces(
+void g_cube_make_faces(
     float *data, float ao[6][4], float light[6][4],
     int left, int right, int top, int bottom, int front, int back,
     int wleft, int wright, int wtop, int wbottom, int wfront, int wback,
@@ -79,7 +79,7 @@ void cube_make_faces(
     }
 }
 
-void cube_make_cube(
+void g_cube_make_cube(
     float *data, float ao[6][4], float light[6][4],
     int left, int right, int top, int bottom, int front, int back,
     float x, float y, float z, float n, int w)
@@ -90,14 +90,14 @@ void cube_make_cube(
     int wbottom = blocks[w][3];
     int wfront = blocks[w][4];
     int wback = blocks[w][5];
-    cube_make_faces(
+    g_cube_make_faces(
         data, ao, light,
         left, right, top, bottom, front, back,
         wleft, wright, wtop, wbottom, wfront, wback,
         x, y, z, n);
 }
 
-void cube_make_plant(
+void g_cube_make_plant(
     float *data, float ao, float light,
     float px, float py, float pz, float n, int w, float rotation)
 {
@@ -148,16 +148,16 @@ void cube_make_plant(
     }
     float ma[16];
     float mb[16];
-    mat_identity(ma);
-    mat_rotate(mb, 0, 1, 0, RADIANS(rotation));
-    mat_multiply(ma, mb, ma);
-    mat_apply(data, ma, 24, 3, 10);
-    mat_translate(mb, px, py, pz);
-    mat_multiply(ma, mb, ma);
-    mat_apply(data, ma, 24, 0, 10);
+    g_mat_identity(ma);
+    g_mat_rotate(mb, 0, 1, 0, RADIANS(rotation));
+    g_mat_multiply(ma, mb, ma);
+    g_mat_apply(data, ma, 24, 3, 10);
+    g_mat_translate(mb, px, py, pz);
+    g_mat_multiply(ma, mb, ma);
+    g_mat_apply(data, ma, 24, 0, 10);
 }
 
-void cube_make_player(
+void g_cube_make_player(
     float *data,
     float x, float y, float z, float rx, float ry)
 {
@@ -170,25 +170,25 @@ void cube_make_player(
         {0.8, 0.8, 0.8, 0.8},
         {0.8, 0.8, 0.8, 0.8}
     };
-    cube_make_faces(
+    g_cube_make_faces(
         data, ao, light,
         1, 1, 1, 1, 1, 1,
         226, 224, 241, 209, 225, 227,
         0, 0, 0, 0.4);
     float ma[16];
     float mb[16];
-    mat_identity(ma);
-    mat_rotate(mb, 0, 1, 0, rx);
-    mat_multiply(ma, mb, ma);
-    mat_rotate(mb, cosf(rx), 0, sinf(rx), -ry);
-    mat_multiply(ma, mb, ma);
-    mat_apply(data, ma, 36, 3, 10);
-    mat_translate(mb, x, y, z);
-    mat_multiply(ma, mb, ma);
-    mat_apply(data, ma, 36, 0, 10);
+    g_mat_identity(ma);
+    g_mat_rotate(mb, 0, 1, 0, rx);
+    g_mat_multiply(ma, mb, ma);
+    g_mat_rotate(mb, cosf(rx), 0, sinf(rx), -ry);
+    g_mat_multiply(ma, mb, ma);
+    g_mat_apply(data, ma, 36, 3, 10);
+    g_mat_translate(mb, x, y, z);
+    g_mat_multiply(ma, mb, ma);
+    g_mat_apply(data, ma, 36, 0, 10);
 }
 
-void cube_make_wireframe(float *data, float x, float y, float z, float n) {
+void g_cube_make_wireframe(float *data, float x, float y, float z, float n) {
     static const float positions[8][3] = {
         {-1, -1, -1},
         {-1, -1, +1},
@@ -213,7 +213,7 @@ void cube_make_wireframe(float *data, float x, float y, float z, float n) {
     }
 }
 
-void cube_make_character(
+void g_cube_make_character(
     float *data,
     float x, float y, float n, float m, char c)
 {
@@ -238,7 +238,7 @@ void cube_make_character(
     *(d++) = du + 0; *(d++) = dv + b;
 }
 
-void cube_make_character_3d(
+void g_cube_make_character_3d(
     float *data, float x, float y, float z, float n, int face, char c)
 {
     static const float positions[8][6][3] = {
@@ -322,9 +322,9 @@ int _make_sphere(
             ac[i] = (a[i] + c[i]) / 2;
             bc[i] = (b[i] + c[i]) / 2;
         }
-        mat_normalize(ab + 0, ab + 1, ab + 2);
-        mat_normalize(ac + 0, ac + 1, ac + 2);
-        mat_normalize(bc + 0, bc + 1, bc + 2);
+        g_mat_normalize(ab + 0, ab + 1, ab + 2);
+        g_mat_normalize(ac + 0, ac + 1, ac + 2);
+        g_mat_normalize(bc + 0, bc + 1, bc + 2);
         float tab[2], tac[2], tbc[2];
         tab[0] = 0; tab[1] = 1 - acosf(ab[1]) / PI;
         tac[0] = 0; tac[1] = 1 - acosf(ac[1]) / PI;
@@ -343,7 +343,7 @@ int _make_sphere(
     }
 }
 
-void cube_make_sphere(float *data, float r, int detail) {
+void g_cube_make_sphere(float *data, float r, int detail) {
     // detail, triangles, floats
     // 0, 8, 192
     // 1, 32, 768

@@ -3,12 +3,12 @@
 #include "g_matrix.h"
 #include "m_util.h"
 
-void mat_normalize(float *x, float *y, float *z) {
+void g_mat_normalize(float *x, float *y, float *z) {
     float d = sqrtf((*x) * (*x) + (*y) * (*y) + (*z) * (*z));
     *x /= d; *y /= d; *z /= d;
 }
 
-void mat_identity(float *matrix) {
+void g_mat_identity(float *matrix) {
     matrix[0] = 1;
     matrix[1] = 0;
     matrix[2] = 0;
@@ -27,7 +27,7 @@ void mat_identity(float *matrix) {
     matrix[15] = 1;
 }
 
-void mat_translate(float *matrix, float dx, float dy, float dz) {
+void g_mat_translate(float *matrix, float dx, float dy, float dz) {
     matrix[0] = 1;
     matrix[1] = 0;
     matrix[2] = 0;
@@ -46,8 +46,8 @@ void mat_translate(float *matrix, float dx, float dy, float dz) {
     matrix[15] = 1;
 }
 
-void mat_rotate(float *matrix, float x, float y, float z, float angle) {
-    mat_normalize(&x, &y, &z);
+void g_mat_rotate(float *matrix, float x, float y, float z, float angle) {
+    g_mat_normalize(&x, &y, &z);
     float s = sinf(angle);
     float c = cosf(angle);
     float m = 1 - c;
@@ -69,7 +69,7 @@ void mat_rotate(float *matrix, float x, float y, float z, float angle) {
     matrix[15] = 1;
 }
 
-void mat_vec_multiply(float *vector, float *a, float *b) {
+void g_mat_vec_multiply(float *vector, float *a, float *b) {
     float result[4];
     for (int i = 0; i < 4; i++) {
         float total = 0;
@@ -85,7 +85,7 @@ void mat_vec_multiply(float *vector, float *a, float *b) {
     }
 }
 
-void mat_multiply(float *matrix, float *a, float *b) {
+void g_mat_multiply(float *matrix, float *a, float *b) {
     float result[16];
     for (int c = 0; c < 4; c++) {
         for (int r = 0; r < 4; r++) {
@@ -104,18 +104,18 @@ void mat_multiply(float *matrix, float *a, float *b) {
     }
 }
 
-void mat_apply(float *data, float *matrix, int count, int offset, int stride) {
+void g_mat_apply(float *data, float *matrix, int count, int offset, int stride) {
     float vec[4] = {0, 0, 0, 1};
     for (int i = 0; i < count; i++) {
         float *d = data + offset + stride * i;
         vec[0] = *(d++); vec[1] = *(d++); vec[2] = *(d++);
-        mat_vec_multiply(vec, matrix, vec);
+        g_mat_vec_multiply(vec, matrix, vec);
         d = data + offset + stride * i;
         *(d++) = vec[0]; *(d++) = vec[1]; *(d++) = vec[2];
     }
 }
 
-void mat_frustum_planes(float planes[6][4], int radius, float *matrix) {
+void g_mat_frustum_planes(float planes[6][4], int radius, float *matrix) {
     float znear = 0.125;
     float zfar = radius * 32 + 64;
     float *m = matrix;
@@ -145,7 +145,7 @@ void mat_frustum_planes(float planes[6][4], int radius, float *matrix) {
     planes[5][3] = zfar * m[15] - m[14];
 }
 
-void mat_frustum(
+void g_mat_frustum(
     float *matrix, float left, float right, float bottom,
     float top, float znear, float zfar)
 {
@@ -172,17 +172,17 @@ void mat_frustum(
     matrix[15] = 0.0;
 }
 
-void mat_perspective(
+void g_mat_perspective(
     float *matrix, float fov, float aspect,
     float znear, float zfar)
 {
     float ymax, xmax;
     ymax = znear * tanf(fov * PI / 360.0);
     xmax = ymax * aspect;
-    mat_frustum(matrix, -xmax, xmax, -ymax, ymax, znear, zfar);
+    g_mat_frustum(matrix, -xmax, xmax, -ymax, ymax, znear, zfar);
 }
 
-void mat_ortho(
+void g_mat_ortho(
     float *matrix,
     float left, float right, float bottom, float top, float near, float far)
 {
@@ -204,11 +204,11 @@ void mat_ortho(
     matrix[15] = 1;
 }
 
-void mat_set_2d(float *matrix, int width, int height) {
-    mat_ortho(matrix, 0, width, 0, height, -1, 1);
+void g_mat_set_2d(float *matrix, int width, int height) {
+    g_mat_ortho(matrix, 0, width, 0, height, -1, 1);
 }
 
-void mat_set_3d(
+void g_mat_set_3d(
     float *matrix, int width, int height,
     float x, float y, float z, float rx, float ry,
     float fov, int ortho, int radius)
@@ -218,26 +218,26 @@ void mat_set_3d(
     float aspect = (float)width / height;
     float znear = 0.125;
     float zfar = radius * 32 + 64;
-    mat_identity(a);
-    mat_translate(b, -x, -y, -z);
-    mat_multiply(a, b, a);
-    mat_rotate(b, cosf(rx), 0, sinf(rx), ry);
-    mat_multiply(a, b, a);
-    mat_rotate(b, 0, 1, 0, -rx);
-    mat_multiply(a, b, a);
+    g_mat_identity(a);
+    g_mat_translate(b, -x, -y, -z);
+    g_mat_multiply(a, b, a);
+    g_mat_rotate(b, cosf(rx), 0, sinf(rx), ry);
+    g_mat_multiply(a, b, a);
+    g_mat_rotate(b, 0, 1, 0, -rx);
+    g_mat_multiply(a, b, a);
     if (ortho) {
         int size = ortho;
-        mat_ortho(b, -size * aspect, size * aspect, -size, size, -zfar, zfar);
+        g_mat_ortho(b, -size * aspect, size * aspect, -size, size, -zfar, zfar);
     }
     else {
-        mat_perspective(b, fov, aspect, znear, zfar);
+        g_mat_perspective(b, fov, aspect, znear, zfar);
     }
-    mat_multiply(a, b, a);
-    mat_identity(matrix);
-    mat_multiply(matrix, a, matrix);
+    g_mat_multiply(a, b, a);
+    g_mat_identity(matrix);
+    g_mat_multiply(matrix, a, matrix);
 }
 
-void mat_matrix_set_item(float *matrix, int width, int height, int scale) {
+void g_mat_matrix_set_item(float *matrix, int width, int height, int scale) {
     float a[16];
     float b[16];
     float aspect = (float)width / height;
@@ -245,15 +245,15 @@ void mat_matrix_set_item(float *matrix, int width, int height, int scale) {
     float box = height / size / 2;
     float xoffset = 1 - size / width * 2;
     float yoffset = 1 - size / height * 2;
-    mat_identity(a);
-    mat_rotate(b, 0, 1, 0, -PI / 4);
-    mat_multiply(a, b, a);
-    mat_rotate(b, 1, 0, 0, -PI / 10);
-    mat_multiply(a, b, a);
-    mat_ortho(b, -box * aspect, box * aspect, -box, box, -1, 1);
-    mat_multiply(a, b, a);
-    mat_translate(b, -xoffset, -yoffset, 0);
-    mat_multiply(a, b, a);
-    mat_identity(matrix);
-    mat_multiply(matrix, a, matrix);
+    g_mat_identity(a);
+    g_mat_rotate(b, 0, 1, 0, -PI / 4);
+    g_mat_multiply(a, b, a);
+    g_mat_rotate(b, 1, 0, 0, -PI / 10);
+    g_mat_multiply(a, b, a);
+    g_mat_ortho(b, -box * aspect, box * aspect, -box, box, -1, 1);
+    g_mat_multiply(a, b, a);
+    g_mat_translate(b, -xoffset, -yoffset, 0);
+    g_mat_multiply(a, b, a);
+    g_mat_identity(matrix);
+    g_mat_multiply(matrix, a, matrix);
 }

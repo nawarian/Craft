@@ -25,22 +25,29 @@ typedef struct {
     double since;
 } FPS;
 
-int rand_int(int n);
-double rand_double();
-void update_fps(FPS *fps);
+// Random
+int m_util_rand_int(int n);
+double m_util_rand_double();
 
-GLuint gen_buffer(GLsizei size, GLfloat *data);
-void del_buffer(GLuint buffer);
-GLfloat *malloc_faces(int components, int faces);
-GLuint gen_faces(int components, int faces, GLfloat *data);
-GLuint make_shader(GLenum type, const char *source);
-GLuint load_shader(GLenum type, const char *path);
-GLuint make_program(GLuint shader1, GLuint shader2);
-GLuint load_program(const char *path1, const char *path2);
-void load_png_texture(const char *file_name);
-char *tokenize(char *str, const char *delim, char **key);
-int char_width(char input);
-int string_width(const char *input);
-int wrap(const char *input, int max_width, char *output, int max_length);
+// FPS
+void m_util_fps_update(FPS *fps);
+
+// GL
+GLuint m_util_buffer_gen(GLsizei size, GLfloat *data);
+void m_util_buffer_del(GLuint buffer);
+GLfloat *m_util_faces_malloc(int components, int faces);
+GLuint m_util_faces_gen(int components, int faces, GLfloat *data);
+GLuint m_util_shader_make(GLenum type, const char *source);
+GLuint m_util_shader_load(GLenum type, const char *path);
+GLuint m_util_program_make(GLuint shader1, GLuint shader2);
+GLuint m_util_program_load(const char *path1, const char *path2);
+void m_util_texture_load_png(const char *file_name);
+
+// String
+char *m_util_tokenize(char *str, const char *delim, char **key);
+int m_util_char_width(char input);
+int m_util_string_width(const char *input);
+int m_util_wrap(const char *input, int max_width, char *output, int max_length);
 
 #endif
+
