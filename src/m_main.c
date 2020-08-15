@@ -1182,7 +1182,7 @@ void load_chunk(WorkerItem *item) {
     int q = item->q;
     Map *block_map = item->block_maps[1][1];
     Map *light_map = item->light_maps[1][1];
-    create_world(p, q, p_map_set_func, block_map);
+    p_world_create(p, q, p_map_set_func, block_map);
     d_db_load_blocks(block_map, p, q);
     d_db_load_lights(light_map, p, q);
 }

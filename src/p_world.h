@@ -3,6 +3,7 @@
 
 typedef void (*world_func)(int, int, int, int, void *);
 
-void create_world(int p, int q, world_func func, void *arg);
+void p_world_create(int p, int q, world_func func, void *arg);
 
 #endif
+
