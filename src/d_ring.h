@@ -1,5 +1,5 @@
-#ifndef _ring_h_
-#define _ring_h_
+#ifndef _d_ring_h_
+#define _d_ring_h_
 
 typedef enum {
     BLOCK,

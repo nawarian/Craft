@@ -6,19 +6,23 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "auth.h"
-#include "client.h"
-#include "config.h"
-#include "cube.h"
-#include "db.h"
-#include "item.h"
-#include "map.h"
-#include "matrix.h"
+
+// /deps
 #include "noise.h"
-#include "sign.h"
 #include "tinycthread.h"
-#include "util.h"
-#include "world.h"
+
+// /src
+#include "d_db.h"
+#include "g_config.h"
+#include "g_cube.h"
+#include "g_item.h"
+#include "g_matrix.h"
+#include "g_sign.h"
+#include "m_util.h"
+#include "n_auth.h"
+#include "n_client.h"
+#include "p_map.h"
+#include "p_world.h"
 
 #define MAX_CHUNKS 8192
 #define MAX_PLAYERS 128

@@ -1,5 +1,5 @@
-#ifndef _matrix_h_
-#define _matrix_h_
+#ifndef _g_matrix_h_
+#define _g_matrix_h_
 
 void normalize(float *x, float *y, float *z);
 void mat_identity(float *matrix);

@@ -1,5 +1,5 @@
-#ifndef _map_h_
-#define _map_h_
+#ifndef _p_map_h_
+#define _p_map_h_
 
 #define EMPTY_ENTRY(entry) ((entry)->value == 0)
 

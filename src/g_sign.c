@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
-#include "sign.h"
+#include "g_sign.h"
 
 void sign_list_alloc(SignList *list, int capacity) {
     list->capacity = capacity;

@@ -1,6 +1,6 @@
-#include "config.h"
+#include "g_config.h"
 #include "noise.h"
-#include "world.h"
+#include "p_world.h"
 
 void create_world(int p, int q, world_func func, void *arg) {
     int pad = 1;

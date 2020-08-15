@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
-#include "map.h"
+#include "p_map.h"
 
 int hash_int(int key) {
     key = ~key + (key << 15);

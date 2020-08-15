@@ -1,5 +1,5 @@
-#ifndef _client_h_
-#define _client_h_
+#ifndef _n_client_h_
+#define _n_client_h_
 
 #define DEFAULT_PORT 4080
 

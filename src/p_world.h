@@ -1,5 +1,5 @@
-#ifndef _world_h_
-#define _world_h_
+#ifndef _p_world_h_
+#define _p_world_h_
 
 typedef void (*world_func)(int, int, int, int, void *);
 

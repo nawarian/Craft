@@ -1,9 +1,9 @@
-#ifndef _util_h_
-#define _util_h_
+#ifndef _m_util_h_
+#define _m_util_h_
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include "config.h"
+#include "g_config.h"
 
 #define PI 3.14159265359
 #define DEGREES(radians) ((radians) * 180 / PI)

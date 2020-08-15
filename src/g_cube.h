@@ -1,5 +1,5 @@
-#ifndef _cube_h_
-#define _cube_h_
+#ifndef _g_cube_h_
+#define _g_cube_h_
 
 void make_cube_faces(
     float *data, float ao[6][4], float light[6][4],

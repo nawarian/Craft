@@ -1,5 +1,5 @@
-#include "item.h"
-#include "util.h"
+#include "g_item.h"
+#include "m_util.h"
 
 const int items[] = {
     // items the user can build

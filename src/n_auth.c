@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "auth.h"
+#include "n_auth.h"
 
 #define MAX_POST_LENGTH 1024
 #define MAX_RESPONSE_LENGTH 1024

@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
-#include "ring.h"
+#include "d_ring.h"
 
 void ring_alloc(Ring *ring, int capacity) {
     ring->capacity = capacity;

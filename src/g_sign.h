@@ -1,5 +1,5 @@
-#ifndef _sign_h_
-#define _sign_h_
+#ifndef _g_sign_h_
+#define _g_sign_h_
 
 #define MAX_SIGN_LENGTH 64
 

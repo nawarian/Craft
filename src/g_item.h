@@ -1,5 +1,5 @@
-#ifndef _item_h_
-#define _item_h_
+#ifndef _g_item_h_
+#define _g_item_h_
 
 #define EMPTY 0
 #define GRASS 1

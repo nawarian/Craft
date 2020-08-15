@@ -1,6 +1,6 @@
 #include <string.h>
-#include "db.h"
-#include "ring.h"
+#include "d_db.h"
+#include "d_ring.h"
 #include "sqlite3.h"
 #include "tinycthread.h"
 

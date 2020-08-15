@@ -1,8 +1,8 @@
 #include <math.h>
-#include "cube.h"
-#include "item.h"
-#include "matrix.h"
-#include "util.h"
+#include "g_cube.h"
+#include "g_item.h"
+#include "g_matrix.h"
+#include "m_util.h"
 
 void make_cube_faces(
     float *data, float ao[6][4], float light[6][4],

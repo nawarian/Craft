@@ -1,8 +1,8 @@
-#ifndef _db_h_
-#define _db_h_
+#ifndef _d_db_h_
+#define _d_db_h_
 
-#include "map.h"
-#include "sign.h"
+#include "p_map.h"
+#include "g_sign.h"
 
 void db_enable();
 void db_disable();
