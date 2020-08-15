@@ -35,11 +35,12 @@ typedef struct {
     MapEntry *data;
 } Map;
 
-void map_alloc(Map *map, int dx, int dy, int dz, int mask);
-void map_free(Map *map);
-void map_copy(Map *dst, Map *src);
-void map_grow(Map *map);
-int map_set(Map *map, int x, int y, int z, int w);
-int map_get(Map *map, int x, int y, int z);
+void p_map_alloc(Map *map, int dx, int dy, int dz, int mask);
+void p_map_free(Map *map);
+void p_map_copy(Map *dst, Map *src);
+void p_map_grow(Map *map);
+int p_map_set(Map *map, int x, int y, int z, int w);
+int p_map_get(Map *map, int x, int y, int z);
 
 #endif
+

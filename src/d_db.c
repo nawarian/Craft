@@ -414,7 +414,7 @@ void d_db_load_blocks(Map *map, int p, int q) {
         int y = sqlite3_column_int(load_blocks_stmt, 1);
         int z = sqlite3_column_int(load_blocks_stmt, 2);
         int w = sqlite3_column_int(load_blocks_stmt, 3);
-        map_set(map, x, y, z, w);
+        p_map_set(map, x, y, z, w);
     }
     mtx_unlock(&load_mtx);
 }
@@ -432,7 +432,7 @@ void d_db_load_lights(Map *map, int p, int q) {
         int y = sqlite3_column_int(load_lights_stmt, 1);
         int z = sqlite3_column_int(load_lights_stmt, 2);
         int w = sqlite3_column_int(load_lights_stmt, 3);
-        map_set(map, x, y, z, w);
+        p_map_set(map, x, y, z, w);
     }
     mtx_unlock(&load_mtx);
 }

@@ -619,7 +619,7 @@ int _hit_test(
         int ny = roundf(y);
         int nz = roundf(z);
         if (nx != px || ny != py || nz != pz) {
-            int hw = map_get(map, nx, ny, nz);
+            int hw = p_map_get(map, nx, ny, nz);
             if (hw > 0) {
                 if (previous) {
                     *hx = px; *hy = py; *hz = pz;
@@ -717,24 +717,24 @@ int collide(int height, float *x, float *y, float *z) {
     float pz = *z - nz;
     float pad = 0.25;
     for (int dy = 0; dy < height; dy++) {
-        if (px < -pad && g_item_is_obstacle(map_get(map, nx - 1, ny - dy, nz))) {
+        if (px < -pad && g_item_is_obstacle(p_map_get(map, nx - 1, ny - dy, nz))) {
             *x = nx - pad;
         }
-        if (px > pad && g_item_is_obstacle(map_get(map, nx + 1, ny - dy, nz))) {
+        if (px > pad && g_item_is_obstacle(p_map_get(map, nx + 1, ny - dy, nz))) {
             *x = nx + pad;
         }
-        if (py < -pad && g_item_is_obstacle(map_get(map, nx, ny - dy - 1, nz))) {
+        if (py < -pad && g_item_is_obstacle(p_map_get(map, nx, ny - dy - 1, nz))) {
             *y = ny - pad;
             result = 1;
         }
-        if (py > pad && g_item_is_obstacle(map_get(map, nx, ny - dy + 1, nz))) {
+        if (py > pad && g_item_is_obstacle(p_map_get(map, nx, ny - dy + 1, nz))) {
             *y = ny + pad;
             result = 1;
         }
-        if (pz < -pad && g_item_is_obstacle(map_get(map, nx, ny - dy, nz - 1))) {
+        if (pz < -pad && g_item_is_obstacle(p_map_get(map, nx, ny - dy, nz - 1))) {
             *z = nz - pad;
         }
-        if (pz > pad && g_item_is_obstacle(map_get(map, nx, ny - dy, nz + 1))) {
+        if (pz > pad && g_item_is_obstacle(p_map_get(map, nx, ny - dy, nz + 1))) {
             *z = nz + pad;
         }
     }
@@ -1172,9 +1172,9 @@ void gen_chunk_buffer(Chunk *chunk) {
     chunk->dirty = 0;
 }
 
-void map_set_func(int x, int y, int z, int w, void *arg) {
+void p_map_set_func(int x, int y, int z, int w, void *arg) {
     Map *map = (Map *)arg;
-    map_set(map, x, y, z, w);
+    p_map_set(map, x, y, z, w);
 }
 
 void load_chunk(WorkerItem *item) {
@@ -1182,7 +1182,7 @@ void load_chunk(WorkerItem *item) {
     int q = item->q;
     Map *block_map = item->block_maps[1][1];
     Map *light_map = item->light_maps[1][1];
-    create_world(p, q, map_set_func, block_map);
+    create_world(p, q, p_map_set_func, block_map);
     d_db_load_blocks(block_map, p, q);
     d_db_load_lights(light_map, p, q);
 }
@@ -1208,8 +1208,8 @@ void init_chunk(Chunk *chunk, int p, int q) {
     int dx = p * CHUNK_SIZE - 1;
     int dy = 0;
     int dz = q * CHUNK_SIZE - 1;
-    map_alloc(block_map, dx, dy, dz, 0x7fff);
-    map_alloc(light_map, dx, dy, dz, 0xf);
+    p_map_alloc(block_map, dx, dy, dz, 0x7fff);
+    p_map_alloc(light_map, dx, dy, dz, 0xf);
 }
 
 void create_chunk(Chunk *chunk, int p, int q) {
@@ -1245,8 +1245,8 @@ void delete_chunks() {
             }
         }
         if (delete) {
-            map_free(&chunk->map);
-            map_free(&chunk->lights);
+            p_map_free(&chunk->map);
+            p_map_free(&chunk->lights);
             g_sign_list_free(&chunk->signs);
             m_util_buffer_del(chunk->buffer);
             m_util_buffer_del(chunk->sign_buffer);
@@ -1260,8 +1260,8 @@ void delete_chunks() {
 void delete_all_chunks() {
     for (int i = 0; i < g->chunk_count; i++) {
         Chunk *chunk = g->chunks + i;
-        map_free(&chunk->map);
-        map_free(&chunk->lights);
+        p_map_free(&chunk->map);
+        p_map_free(&chunk->lights);
         g_sign_list_free(&chunk->signs);
         m_util_buffer_del(chunk->buffer);
         m_util_buffer_del(chunk->sign_buffer);
@@ -1280,10 +1280,10 @@ void check_workers() {
                 if (item->load) {
                     Map *block_map = item->block_maps[1][1];
                     Map *light_map = item->light_maps[1][1];
-                    map_free(&chunk->map);
-                    map_free(&chunk->lights);
-                    map_copy(&chunk->map, block_map);
-                    map_copy(&chunk->lights, light_map);
+                    p_map_free(&chunk->map);
+                    p_map_free(&chunk->lights);
+                    p_map_copy(&chunk->map, block_map);
+                    p_map_copy(&chunk->lights, light_map);
                     request_chunk(item->p, item->q);
                 }
                 generate_chunk(chunk, item);
@@ -1293,11 +1293,11 @@ void check_workers() {
                     Map *block_map = item->block_maps[a][b];
                     Map *light_map = item->light_maps[a][b];
                     if (block_map) {
-                        map_free(block_map);
+                        p_map_free(block_map);
                         free(block_map);
                     }
                     if (light_map) {
-                        map_free(light_map);
+                        p_map_free(light_map);
                         free(light_map);
                     }
                 }
@@ -1402,9 +1402,9 @@ void ensure_chunks_worker(Player *player, Worker *worker) {
             }
             if (other) {
                 Map *block_map = malloc(sizeof(Map));
-                map_copy(block_map, &other->map);
+                p_map_copy(block_map, &other->map);
                 Map *light_map = malloc(sizeof(Map));
-                map_copy(light_map, &other->lights);
+                p_map_copy(light_map, &other->lights);
                 item->block_maps[dp + 1][dq + 1] = block_map;
                 item->light_maps[dp + 1][dq + 1] = light_map;
             }
@@ -1516,8 +1516,8 @@ void toggle_light(int x, int y, int z) {
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         Map *map = &chunk->lights;
-        int w = map_get(map, x, y, z) ? 0 : 15;
-        map_set(map, x, y, z, w);
+        int w = p_map_get(map, x, y, z) ? 0 : 15;
+        p_map_set(map, x, y, z, w);
         d_db_insert_light(p, q, x, y, z, w);
         n_client_light(x, y, z, w);
         dirty_chunk(chunk);
@@ -1528,7 +1528,7 @@ void set_light(int p, int q, int x, int y, int z, int w) {
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         Map *map = &chunk->lights;
-        if (map_set(map, x, y, z, w)) {
+        if (p_map_set(map, x, y, z, w)) {
             dirty_chunk(chunk);
             d_db_insert_light(p, q, x, y, z, w);
         }
@@ -1542,7 +1542,7 @@ void _set_block(int p, int q, int x, int y, int z, int w, int dirty) {
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         Map *map = &chunk->map;
-        if (map_set(map, x, y, z, w)) {
+        if (p_map_set(map, x, y, z, w)) {
             if (dirty) {
                 dirty_chunk(chunk);
             }
@@ -1593,7 +1593,7 @@ int get_block(int x, int y, int z) {
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         Map *map = &chunk->map;
-        return map_get(map, x, y, z);
+        return p_map_get(map, x, y, z);
     }
     return 0;
 }
