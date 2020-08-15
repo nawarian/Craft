@@ -3,7 +3,7 @@
 #include "g_matrix.h"
 #include "m_util.h"
 
-void normalize(float *x, float *y, float *z) {
+void mat_normalize(float *x, float *y, float *z) {
     float d = sqrtf((*x) * (*x) + (*y) * (*y) + (*z) * (*z));
     *x /= d; *y /= d; *z /= d;
 }
@@ -47,7 +47,7 @@ void mat_translate(float *matrix, float dx, float dy, float dz) {
 }
 
 void mat_rotate(float *matrix, float x, float y, float z, float angle) {
-    normalize(&x, &y, &z);
+    mat_normalize(&x, &y, &z);
     float s = sinf(angle);
     float c = cosf(angle);
     float m = 1 - c;
@@ -115,7 +115,7 @@ void mat_apply(float *data, float *matrix, int count, int offset, int stride) {
     }
 }
 
-void frustum_planes(float planes[6][4], int radius, float *matrix) {
+void mat_frustum_planes(float planes[6][4], int radius, float *matrix) {
     float znear = 0.125;
     float zfar = radius * 32 + 64;
     float *m = matrix;
@@ -204,11 +204,11 @@ void mat_ortho(
     matrix[15] = 1;
 }
 
-void set_matrix_2d(float *matrix, int width, int height) {
+void mat_set_2d(float *matrix, int width, int height) {
     mat_ortho(matrix, 0, width, 0, height, -1, 1);
 }
 
-void set_matrix_3d(
+void mat_set_3d(
     float *matrix, int width, int height,
     float x, float y, float z, float rx, float ry,
     float fov, int ortho, int radius)
@@ -237,7 +237,7 @@ void set_matrix_3d(
     mat_multiply(matrix, a, matrix);
 }
 
-void set_matrix_item(float *matrix, int width, int height, int scale) {
+void mat_matrix_set_item(float *matrix, int width, int height, int scale) {
     float a[16];
     float b[16];
     float aspect = (float)width / height;

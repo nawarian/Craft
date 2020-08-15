@@ -1335,11 +1335,11 @@ void force_chunks(Player *player) {
 void ensure_chunks_worker(Player *player, Worker *worker) {
     State *s = &player->state;
     float matrix[16];
-    set_matrix_3d(
+    mat_set_3d(
         matrix, g->width, g->height,
         s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->render_radius);
     float planes[6][4];
-    frustum_planes(planes, g->render_radius, matrix);
+    mat_frustum_planes(planes, g->render_radius, matrix);
     int p = chunked(s->x);
     int q = chunked(s->z);
     int r = g->create_radius;
@@ -1618,11 +1618,11 @@ int render_chunks(Attrib *attrib, Player *player) {
     int q = chunked(s->z);
     float light = get_daylight();
     float matrix[16];
-    set_matrix_3d(
+    mat_set_3d(
         matrix, g->width, g->height,
         s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->render_radius);
     float planes[6][4];
-    frustum_planes(planes, g->render_radius, matrix);
+    mat_frustum_planes(planes, g->render_radius, matrix);
     glUseProgram(attrib->program);
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
     glUniform3f(attrib->camera, s->x, s->y, s->z);
@@ -1653,11 +1653,11 @@ void render_signs(Attrib *attrib, Player *player) {
     int p = chunked(s->x);
     int q = chunked(s->z);
     float matrix[16];
-    set_matrix_3d(
+    mat_set_3d(
         matrix, g->width, g->height,
         s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->render_radius);
     float planes[6][4];
-    frustum_planes(planes, g->render_radius, matrix);
+    mat_frustum_planes(planes, g->render_radius, matrix);
     glUseProgram(attrib->program);
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
     glUniform1i(attrib->sampler, 3);
@@ -1686,7 +1686,7 @@ void render_sign(Attrib *attrib, Player *player) {
     }
     State *s = &player->state;
     float matrix[16];
-    set_matrix_3d(
+    mat_set_3d(
         matrix, g->width, g->height,
         s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->render_radius);
     glUseProgram(attrib->program);
@@ -1706,7 +1706,7 @@ void render_sign(Attrib *attrib, Player *player) {
 void render_players(Attrib *attrib, Player *player) {
     State *s = &player->state;
     float matrix[16];
-    set_matrix_3d(
+    mat_set_3d(
         matrix, g->width, g->height,
         s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->render_radius);
     glUseProgram(attrib->program);
@@ -1725,7 +1725,7 @@ void render_players(Attrib *attrib, Player *player) {
 void render_sky(Attrib *attrib, Player *player, GLuint buffer) {
     State *s = &player->state;
     float matrix[16];
-    set_matrix_3d(
+    mat_set_3d(
         matrix, g->width, g->height,
         0, 0, 0, s->rx, s->ry, g->fov, 0, g->render_radius);
     glUseProgram(attrib->program);
@@ -1738,7 +1738,7 @@ void render_sky(Attrib *attrib, Player *player, GLuint buffer) {
 void render_wireframe(Attrib *attrib, Player *player) {
     State *s = &player->state;
     float matrix[16];
-    set_matrix_3d(
+    mat_set_3d(
         matrix, g->width, g->height,
         s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->render_radius);
     int hx, hy, hz;
@@ -1757,7 +1757,7 @@ void render_wireframe(Attrib *attrib, Player *player) {
 
 void render_crosshairs(Attrib *attrib) {
     float matrix[16];
-    set_matrix_2d(matrix, g->width, g->height);
+    mat_set_2d(matrix, g->width, g->height);
     glUseProgram(attrib->program);
     glLineWidth(4 * g->scale);
     glEnable(GL_COLOR_LOGIC_OP);
@@ -1770,7 +1770,7 @@ void render_crosshairs(Attrib *attrib) {
 
 void render_item(Attrib *attrib) {
     float matrix[16];
-    set_matrix_item(matrix, g->width, g->height, g->scale);
+    mat_matrix_set_item(matrix, g->width, g->height, g->scale);
     glUseProgram(attrib->program);
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
     glUniform3f(attrib->camera, 0, 0, 5);
@@ -1793,7 +1793,7 @@ void render_text(
     Attrib *attrib, int justify, float x, float y, float n, char *text)
 {
     float matrix[16];
-    set_matrix_2d(matrix, g->width, g->height);
+    mat_set_2d(matrix, g->width, g->height);
     glUseProgram(attrib->program);
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
     glUniform1i(attrib->sampler, 1);

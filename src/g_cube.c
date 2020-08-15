@@ -322,9 +322,9 @@ int _make_sphere(
             ac[i] = (a[i] + c[i]) / 2;
             bc[i] = (b[i] + c[i]) / 2;
         }
-        normalize(ab + 0, ab + 1, ab + 2);
-        normalize(ac + 0, ac + 1, ac + 2);
-        normalize(bc + 0, bc + 1, bc + 2);
+        mat_normalize(ab + 0, ab + 1, ab + 2);
+        mat_normalize(ac + 0, ac + 1, ac + 2);
+        mat_normalize(bc + 0, bc + 1, bc + 2);
         float tab[2], tac[2], tbc[2];
         tab[0] = 0; tab[1] = 1 - acosf(ab[1]) / PI;
         tac[0] = 0; tac[1] = 1 - acosf(ac[1]) / PI;
