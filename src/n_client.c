@@ -17,7 +17,7 @@
 #define QUEUE_SIZE 1048576
 #define RECV_SIZE 4096
 
-static int client_enabled = 0;
+static int is_client_enabled = 0;
 static int running = 0;
 static int sd = 0;
 static int bytes_sent = 0;
@@ -27,20 +27,20 @@ static int qsize = 0;
 static thrd_t recv_thread;
 static mtx_t mutex;
 
-void client_enable() {
-    client_enabled = 1;
+void n_client_enable() {
+    is_client_enabled = 1;
 }
 
-void client_disable() {
-    client_enabled = 0;
+void n_client_disable() {
+    is_client_enabled = 0;
 }
 
-int get_client_enabled() {
-    return client_enabled;
+int n_client_is_enabled() {
+    return is_client_enabled;
 }
 
-int client_sendall(int sd, char *data, int length) {
-    if (!client_enabled) {
+int n_client_sendall(int sd, char *data, int length) {
+    if (!is_client_enabled) {
         return 0;
     }
     int count = 0;
@@ -56,36 +56,36 @@ int client_sendall(int sd, char *data, int length) {
     return 0;
 }
 
-void client_send(char *data) {
-    if (!client_enabled) {
+void n_client_send(char *data) {
+    if (!is_client_enabled) {
         return;
     }
-    if (client_sendall(sd, data, strlen(data)) == -1) {
-        perror("client_sendall");
+    if (n_client_sendall(sd, data, strlen(data)) == -1) {
+        perror("n_client_sendall");
         exit(1);
     }
 }
 
-void client_version(int version) {
-    if (!client_enabled) {
+void n_client_version(int version) {
+    if (!is_client_enabled) {
         return;
     }
     char buffer[1024];
     snprintf(buffer, 1024, "V,%d\n", version);
-    client_send(buffer);
+    n_client_send(buffer);
 }
 
-void client_login(const char *username, const char *identity_token) {
-    if (!client_enabled) {
+void n_client_login(const char *username, const char *identity_token) {
+    if (!is_client_enabled) {
         return;
     }
     char buffer[1024];
     snprintf(buffer, 1024, "A,%s,%s\n", username, identity_token);
-    client_send(buffer);
+    n_client_send(buffer);
 }
 
-void client_position(float x, float y, float z, float rx, float ry) {
-    if (!client_enabled) {
+void n_client_position(float x, float y, float z, float rx, float ry) {
+    if (!is_client_enabled) {
         return;
     }
     static float px, py, pz, prx, pry = 0;
@@ -101,47 +101,47 @@ void client_position(float x, float y, float z, float rx, float ry) {
     px = x; py = y; pz = z; prx = rx; pry = ry;
     char buffer[1024];
     snprintf(buffer, 1024, "P,%.2f,%.2f,%.2f,%.2f,%.2f\n", x, y, z, rx, ry);
-    client_send(buffer);
+    n_client_send(buffer);
 }
 
-void client_chunk(int p, int q, int key) {
-    if (!client_enabled) {
+void n_client_chunk(int p, int q, int key) {
+    if (!is_client_enabled) {
         return;
     }
     char buffer[1024];
     snprintf(buffer, 1024, "C,%d,%d,%d\n", p, q, key);
-    client_send(buffer);
+    n_client_send(buffer);
 }
 
-void client_block(int x, int y, int z, int w) {
-    if (!client_enabled) {
+void n_client_block(int x, int y, int z, int w) {
+    if (!is_client_enabled) {
         return;
     }
     char buffer[1024];
     snprintf(buffer, 1024, "B,%d,%d,%d,%d\n", x, y, z, w);
-    client_send(buffer);
+    n_client_send(buffer);
 }
 
-void client_light(int x, int y, int z, int w) {
-    if (!client_enabled) {
+void n_client_light(int x, int y, int z, int w) {
+    if (!is_client_enabled) {
         return;
     }
     char buffer[1024];
     snprintf(buffer, 1024, "L,%d,%d,%d,%d\n", x, y, z, w);
-    client_send(buffer);
+    n_client_send(buffer);
 }
 
-void client_sign(int x, int y, int z, int face, const char *text) {
-    if (!client_enabled) {
+void n_client_sign(int x, int y, int z, int face, const char *text) {
+    if (!is_client_enabled) {
         return;
     }
     char buffer[1024];
     snprintf(buffer, 1024, "S,%d,%d,%d,%d,%s\n", x, y, z, face, text);
-    client_send(buffer);
+    n_client_send(buffer);
 }
 
-void client_talk(const char *text) {
-    if (!client_enabled) {
+void n_client_talk(const char *text) {
+    if (!is_client_enabled) {
         return;
     }
     if (strlen(text) == 0) {
@@ -149,11 +149,11 @@ void client_talk(const char *text) {
     }
     char buffer[1024];
     snprintf(buffer, 1024, "T,%s\n", text);
-    client_send(buffer);
+    n_client_send(buffer);
 }
 
-char *client_recv() {
-    if (!client_enabled) {
+char *n_client_recv() {
+    if (!is_client_enabled) {
         return 0;
     }
     char *result = 0;
@@ -209,8 +209,8 @@ int recv_worker(void *arg) {
     return 0;
 }
 
-void client_connect(char *hostname, int port) {
-    if (!client_enabled) {
+void n_client_connect(char *hostname, int port) {
+    if (!is_client_enabled) {
         return;
     }
     struct hostent *host;
@@ -233,8 +233,8 @@ void client_connect(char *hostname, int port) {
     }
 }
 
-void client_start() {
-    if (!client_enabled) {
+void n_client_start() {
+    if (!is_client_enabled) {
         return;
     }
     running = 1;
@@ -247,8 +247,8 @@ void client_start() {
     }
 }
 
-void client_stop() {
-    if (!client_enabled) {
+void n_client_stop() {
+    if (!is_client_enabled) {
         return;
     }
     running = 0;
