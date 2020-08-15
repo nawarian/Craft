@@ -248,13 +248,13 @@ GLuint gen_crosshair_buffer() {
 
 GLuint gen_wireframe_buffer(float x, float y, float z, float n) {
     float data[72];
-    make_cube_wireframe(data, x, y, z, n);
+    cube_make_wireframe(data, x, y, z, n);
     return gen_buffer(sizeof(data), data);
 }
 
 GLuint gen_sky_buffer() {
     float data[12288];
-    make_sphere(data, 1, 3);
+    cube_make_sphere(data, 1, 3);
     return gen_buffer(sizeof(data), data);
 }
 
@@ -269,7 +269,7 @@ GLuint gen_cube_buffer(float x, float y, float z, float n, int w) {
         {0.5, 0.5, 0.5, 0.5},
         {0.5, 0.5, 0.5, 0.5}
     };
-    make_cube(data, ao, light, 1, 1, 1, 1, 1, 1, x, y, z, n, w);
+    cube_make_cube(data, ao, light, 1, 1, 1, 1, 1, 1, x, y, z, n, w);
     return gen_faces(10, 6, data);
 }
 
@@ -277,13 +277,13 @@ GLuint gen_plant_buffer(float x, float y, float z, float n, int w) {
     GLfloat *data = malloc_faces(10, 4);
     float ao = 0;
     float light = 1;
-    make_plant(data, ao, light, x, y, z, n, w, 45);
+    cube_make_plant(data, ao, light, x, y, z, n, w, 45);
     return gen_faces(10, 4, data);
 }
 
 GLuint gen_player_buffer(float x, float y, float z, float rx, float ry) {
     GLfloat *data = malloc_faces(10, 6);
-    make_player(data, x, y, z, rx, ry);
+    cube_make_player(data, x, y, z, rx, ry);
     return gen_faces(10, 6, data);
 }
 
@@ -291,7 +291,7 @@ GLuint gen_text_buffer(float x, float y, float n, char *text) {
     int length = strlen(text);
     GLfloat *data = malloc_faces(4, length);
     for (int i = 0; i < length; i++) {
-        make_character(data + i * 24, x, y, n / 2, n, text[i]);
+        cube_make_character(data + i * 24, x, y, n / 2, n, text[i]);
         x += n;
     }
     return gen_faces(4, length, data);
@@ -801,7 +801,7 @@ int _gen_sign_buffer(
             rx += dx * width / max_width / 2;
             rz += dz * width / max_width / 2;
             if (line[i] != ' ') {
-                make_character_3d(
+                cube_make_character_3d(
                     data + count * 30, rx, ry, rz, n / 2, face, line[i]);
                 count++;
             }
@@ -1114,12 +1114,12 @@ void compute_chunk(WorkerItem *item) {
                 }
             }
             float rotation = simplex2(ex, ez, 4, 0.5, 2) * 360;
-            make_plant(
+            cube_make_plant(
                 data + offset, min_ao, max_light,
                 ex, ey, ez, 0.5, ew, rotation);
         }
         else {
-            make_cube(
+            cube_make_cube(
                 data + offset, ao, light,
                 f1, f2, f3, f4, f5, f6,
                 ex, ey, ez, 0.5, ew);
