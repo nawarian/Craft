@@ -596,7 +596,7 @@ int highest_block(float x, float z) {
     if (chunk) {
         Map *map = &chunk->map;
         MAP_FOR_EACH(map, ex, ey, ez, ew) {
-            if (is_obstacle(ew) && ex == nx && ez == nz) {
+            if (item_is_obstacle(ew) && ex == nx && ez == nz) {
                 result = MAX(result, ey);
             }
         } END_MAP_FOR_EACH;
@@ -670,7 +670,7 @@ int hit_test(
 int hit_test_face(Player *player, int *x, int *y, int *z, int *face) {
     State *s = &player->state;
     int w = hit_test(0, s->x, s->y, s->z, s->rx, s->ry, x, y, z);
-    if (is_obstacle(w)) {
+    if (item_is_obstacle(w)) {
         int hx, hy, hz;
         hit_test(1, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
         int dx = hx - *x;
@@ -717,24 +717,24 @@ int collide(int height, float *x, float *y, float *z) {
     float pz = *z - nz;
     float pad = 0.25;
     for (int dy = 0; dy < height; dy++) {
-        if (px < -pad && is_obstacle(map_get(map, nx - 1, ny - dy, nz))) {
+        if (px < -pad && item_is_obstacle(map_get(map, nx - 1, ny - dy, nz))) {
             *x = nx - pad;
         }
-        if (px > pad && is_obstacle(map_get(map, nx + 1, ny - dy, nz))) {
+        if (px > pad && item_is_obstacle(map_get(map, nx + 1, ny - dy, nz))) {
             *x = nx + pad;
         }
-        if (py < -pad && is_obstacle(map_get(map, nx, ny - dy - 1, nz))) {
+        if (py < -pad && item_is_obstacle(map_get(map, nx, ny - dy - 1, nz))) {
             *y = ny - pad;
             result = 1;
         }
-        if (py > pad && is_obstacle(map_get(map, nx, ny - dy + 1, nz))) {
+        if (py > pad && item_is_obstacle(map_get(map, nx, ny - dy + 1, nz))) {
             *y = ny + pad;
             result = 1;
         }
-        if (pz < -pad && is_obstacle(map_get(map, nx, ny - dy, nz - 1))) {
+        if (pz < -pad && item_is_obstacle(map_get(map, nx, ny - dy, nz - 1))) {
             *z = nz - pad;
         }
-        if (pz > pad && is_obstacle(map_get(map, nx, ny - dy, nz + 1))) {
+        if (pz > pad && item_is_obstacle(map_get(map, nx, ny - dy, nz + 1))) {
             *z = nz + pad;
         }
     }
@@ -1001,7 +1001,7 @@ void compute_chunk(WorkerItem *item) {
                     continue;
                 }
                 // END TODO
-                opaque[XYZ(x, y, z)] = !is_transparent(w);
+                opaque[XYZ(x, y, z)] = !item_is_transparent(w);
                 if (opaque[XYZ(x, y, z)]) {
                     highest[XZ(x, z)] = MAX(highest[XZ(x, z)], y);
                 }
@@ -1050,7 +1050,7 @@ void compute_chunk(WorkerItem *item) {
         if (total == 0) {
             continue;
         }
-        if (is_plant(ew)) {
+        if (item_is_plant(ew)) {
             total = 4;
         }
         miny = MIN(miny, ey);
@@ -1103,7 +1103,7 @@ void compute_chunk(WorkerItem *item) {
         float ao[6][4];
         float light[6][4];
         occlusion(neighbors, lights, shades, ao, light);
-        if (is_plant(ew)) {
+        if (item_is_plant(ew)) {
             total = 4;
             float min_ao = 1;
             float max_light = 0;
@@ -1602,7 +1602,7 @@ void builder_block(int x, int y, int z, int w) {
     if (y <= 0 || y >= 256) {
         return;
     }
-    if (is_destructable(get_block(x, y, z))) {
+    if (item_is_destructable(get_block(x, y, z))) {
         set_block(x, y, z, 0);
     }
     if (w) {
@@ -1743,7 +1743,7 @@ void render_wireframe(Attrib *attrib, Player *player) {
         s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->render_radius);
     int hx, hy, hz;
     int hw = hit_test(0, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    if (is_obstacle(hw)) {
+    if (item_is_obstacle(hw)) {
         glUseProgram(attrib->program);
         glLineWidth(1);
         glEnable(GL_COLOR_LOGIC_OP);
@@ -1777,7 +1777,7 @@ void render_item(Attrib *attrib) {
     glUniform1i(attrib->sampler, 0);
     glUniform1f(attrib->timer, time_of_day());
     int w = items[g->item_index];
-    if (is_plant(w)) {
+    if (item_is_plant(w)) {
         GLuint buffer = gen_plant_buffer(0, 0, 0, 0.5, w);
         draw_plant(attrib, buffer);
         del_buffer(buffer);
@@ -2136,7 +2136,7 @@ void on_light() {
     State *s = &g->players->state;
     int hx, hy, hz;
     int hw = hit_test(0, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    if (hy > 0 && hy < 256 && is_destructable(hw)) {
+    if (hy > 0 && hy < 256 && item_is_destructable(hw)) {
         toggle_light(hx, hy, hz);
     }
 }
@@ -2145,10 +2145,10 @@ void on_left_click() {
     State *s = &g->players->state;
     int hx, hy, hz;
     int hw = hit_test(0, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    if (hy > 0 && hy < 256 && is_destructable(hw)) {
+    if (hy > 0 && hy < 256 && item_is_destructable(hw)) {
         set_block(hx, hy, hz, 0);
         record_block(hx, hy, hz, 0);
-        if (is_plant(get_block(hx, hy + 1, hz))) {
+        if (item_is_plant(get_block(hx, hy + 1, hz))) {
             set_block(hx, hy + 1, hz, 0);
         }
     }
@@ -2158,7 +2158,7 @@ void on_right_click() {
     State *s = &g->players->state;
     int hx, hy, hz;
     int hw = hit_test(1, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    if (hy > 0 && hy < 256 && is_obstacle(hw)) {
+    if (hy > 0 && hy < 256 && item_is_obstacle(hw)) {
         if (!player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
             set_block(hx, hy, hz, items[g->item_index]);
             record_block(hx, hy, hz, items[g->item_index]);
