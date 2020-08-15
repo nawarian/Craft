@@ -18,144 +18,12 @@
 #include "g_item.h"
 #include "g_matrix.h"
 #include "g_sign.h"
+#include "m_game.h"
 #include "m_util.h"
 #include "n_auth.h"
 #include "n_client.h"
 #include "p_map.h"
 #include "p_world.h"
-
-#define MAX_CHUNKS 8192
-#define MAX_PLAYERS 128
-#define WORKERS 4
-#define MAX_TEXT_LENGTH 256
-#define MAX_NAME_LENGTH 32
-#define MAX_PATH_LENGTH 256
-#define MAX_ADDR_LENGTH 256
-
-#define ALIGN_LEFT 0
-#define ALIGN_CENTER 1
-#define ALIGN_RIGHT 2
-
-#define MODE_OFFLINE 0
-#define MODE_ONLINE 1
-
-#define WORKER_IDLE 0
-#define WORKER_BUSY 1
-#define WORKER_DONE 2
-
-typedef struct {
-    Map map;
-    Map lights;
-    SignList signs;
-    int p;
-    int q;
-    int faces;
-    int sign_faces;
-    int dirty;
-    int miny;
-    int maxy;
-    GLuint buffer;
-    GLuint sign_buffer;
-} Chunk;
-
-typedef struct {
-    int p;
-    int q;
-    int load;
-    Map *block_maps[3][3];
-    Map *light_maps[3][3];
-    int miny;
-    int maxy;
-    int faces;
-    GLfloat *data;
-} WorkerItem;
-
-typedef struct {
-    int index;
-    int state;
-    thrd_t thrd;
-    mtx_t mtx;
-    cnd_t cnd;
-    WorkerItem item;
-} Worker;
-
-typedef struct {
-    int x;
-    int y;
-    int z;
-    int w;
-} Block;
-
-typedef struct {
-    float x;
-    float y;
-    float z;
-    float rx;
-    float ry;
-    float t;
-} State;
-
-typedef struct {
-    int id;
-    char name[MAX_NAME_LENGTH];
-    State state;
-    State state1;
-    State state2;
-    GLuint buffer;
-} Player;
-
-typedef struct {
-    GLuint program;
-    GLuint position;
-    GLuint normal;
-    GLuint uv;
-    GLuint matrix;
-    GLuint sampler;
-    GLuint camera;
-    GLuint timer;
-    GLuint extra1;
-    GLuint extra2;
-    GLuint extra3;
-    GLuint extra4;
-} Attrib;
-
-typedef struct {
-    GLFWwindow *window;
-    Worker workers[WORKERS];
-    Chunk chunks[MAX_CHUNKS];
-    int chunk_count;
-    int create_radius;
-    int render_radius;
-    int delete_radius;
-    int sign_radius;
-    Player players[MAX_PLAYERS];
-    int player_count;
-    int typing;
-    char typing_buffer[MAX_TEXT_LENGTH];
-    int message_index;
-    char messages[MAX_MESSAGES][MAX_TEXT_LENGTH];
-    int width;
-    int height;
-    int observe1;
-    int observe2;
-    int flying;
-    int item_index;
-    int scale;
-    int ortho;
-    float fov;
-    int suppress_char;
-    int mode;
-    int mode_changed;
-    char d_db_path[MAX_PATH_LENGTH];
-    char server_addr[MAX_ADDR_LENGTH];
-    int server_port;
-    int day_length;
-    int time_changed;
-    Block block0;
-    Block block1;
-    Block copy0;
-    Block copy1;
-} Model;
 
 static Model model;
 static Model *g = &model;
@@ -2364,21 +2232,6 @@ void on_mouse_button(GLFWwindow *window, int button, int action, int mods) {
     }
 }
 
-void create_window() {
-    int window_width = WINDOW_WIDTH;
-    int window_height = WINDOW_HEIGHT;
-    GLFWmonitor *monitor = NULL;
-    if (FULLSCREEN) {
-        int mode_count;
-        monitor = glfwGetPrimaryMonitor();
-        const GLFWvidmode *modes = glfwGetVideoModes(monitor, &mode_count);
-        window_width = modes[mode_count - 1].width;
-        window_height = modes[mode_count - 1].height;
-    }
-    g->window = glfwCreateWindow(
-        window_width, window_height, "Craft", monitor, NULL);
-}
-
 void handle_mouse_input() {
     int exclusive =
         glfwGetInputMode(g->window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED;
@@ -2588,72 +2441,19 @@ void reset_model() {
 }
 
 int main(int argc, char **argv) {
-    // INITIALIZATION //
-    curl_global_init(CURL_GLOBAL_DEFAULT);
-    srand(time(NULL));
-    rand();
+    // @todo -> Move callbacks to m_game instead of passing here
+    int init = m_game_init(
+        &model,
+        on_key,
+        on_char,
+        on_mouse_button,
+        on_scroll
+    );
 
-    // WINDOW INITIALIZATION //
-    if (!glfwInit()) {
-        return -1;
+    // Non-zero return, end here.
+    if (init != 0) {
+        return init;
     }
-    create_window();
-    if (!g->window) {
-        glfwTerminate();
-        return -1;
-    }
-
-    glfwMakeContextCurrent(g->window);
-    glfwSwapInterval(VSYNC);
-    glfwSetInputMode(g->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    glfwSetKeyCallback(g->window, on_key);
-    glfwSetCharCallback(g->window, on_char);
-    glfwSetMouseButtonCallback(g->window, on_mouse_button);
-    glfwSetScrollCallback(g->window, on_scroll);
-
-    if (glewInit() != GLEW_OK) {
-        return -1;
-    }
-
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-    glLogicOp(GL_INVERT);
-    glClearColor(0, 0, 0, 1);
-
-    // LOAD TEXTURES //
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    m_util_texture_load_png("textures/texture.png");
-
-    GLuint font;
-    glGenTextures(1, &font);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, font);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    m_util_texture_load_png("textures/font.png");
-
-    GLuint sky;
-    glGenTextures(1, &sky);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, sky);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    m_util_texture_load_png("textures/sky.png");
-
-    GLuint sign;
-    glGenTextures(1, &sign);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, sign);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    m_util_texture_load_png("textures/sign.png");
 
     // LOAD SHADERS //
     Attrib block_attrib = {0};
