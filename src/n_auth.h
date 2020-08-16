@@ -4,4 +4,6 @@
 int n_auth_access_token_get(
     char *result, int length, char *username, char *identity_token);
 
+void n_auth_login(); 
+
 #endif

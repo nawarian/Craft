@@ -2,7 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "d_db.h"
 #include "n_auth.h"
+#include "n_client.h"
 
 #define MAX_POST_LENGTH 1024
 #define MAX_RESPONSE_LENGTH 1024
@@ -47,3 +49,32 @@ int n_auth_access_token_get(
     }
     return 0;
 }
+
+void n_auth_login() {
+    char username[128] = {0};
+    char identity_token[128] = {0};
+    char access_token[128] = {0};
+
+    if (d_db_auth_get_selected(username, 128, identity_token, 128)) {
+        printf("contacting login server for username: %s\n", username);
+
+        if (
+            n_auth_access_token_get(
+                access_token,
+                128,
+                username,
+                identity_token
+            )
+        ) {
+            printf("Successfully authenticated with the login server\n");
+            n_client_login(username, access_token);
+        } else {
+            printf("Failed to authenticate with the login server\n");
+            n_client_login("", "");
+        }
+    } else {
+        printf("Logging in anonymously\n");
+        n_client_login("", "");
+    }
+}
+

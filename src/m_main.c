@@ -1393,29 +1393,6 @@ void add_message(const char *text) {
     g->message_index = (g->message_index + 1) % MAX_MESSAGES;
 }
 
-void login() {
-    char username[128] = {0};
-    char identity_token[128] = {0};
-    char access_token[128] = {0};
-    if (d_db_auth_get_selected(username, 128, identity_token, 128)) {
-        printf("Contacting login server for username: %s\n", username);
-        if (n_auth_access_token_get(
-            access_token, 128, username, identity_token))
-        {
-            printf("Successfully authenticated with the login server\n");
-            n_client_login(username, access_token);
-        }
-        else {
-            printf("Failed to authenticate with the login server\n");
-            n_client_login("", "");
-        }
-    }
-    else {
-        printf("Logging in anonymously\n");
-        n_client_login("", "");
-    }
-}
-
 void copy() {
     memcpy(&g->copy0, &g->block0, sizeof(Block));
     memcpy(&g->copy1, &g->block1, sizeof(Block));
@@ -1613,15 +1590,15 @@ void parse_command(const char *buffer, int forward) {
     if (sscanf(buffer, "/identity %128s %128s", username, token) == 2) {
         d_db_auth_set(username, token);
         add_message("Successfully imported identity token!");
-        login();
+        n_auth_login();
     }
     else if (strcmp(buffer, "/logout") == 0) {
         d_db_auth_select_none();
-        login();
+        n_auth_login();
     }
     else if (sscanf(buffer, "/login %128s", username) == 1) {
         if (d_db_auth_select(username)) {
-            login();
+            n_auth_login();
         }
         else {
             add_message("Unknown username.");
@@ -2248,7 +2225,7 @@ int main(int argc, char **argv) {
             n_client_connect(g->server_addr, g->server_port);
             n_client_start();
             n_client_version(1);
-            login();
+            n_auth_login();
         }
 
         // LOCAL VARIABLES //
