@@ -157,7 +157,7 @@ int m_game_init(
 
 void m_game_create();
 
-void m_game_update();
+void m_game_update(double dt);
 
 #endif
 
