@@ -437,6 +437,39 @@ void m_game_create() {
 
 void m_game_update() {
     // Handle Mouse Movement
+    int exclusive = glfwGetInputMode(g->window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED;
+    static double px = 0;
+    static double py = 0;
+    State *s = &g->players->state;
+
+    if (exclusive && (px || py)) {
+        double mx, my;
+        glfwGetCursorPos(g->window, &mx, &my);
+        float m = 0.0025;
+        s->rx += (mx - px) * m;
+
+        if (INVERT_MOUSE) {
+            s->ry += (my - py) * m;
+        } else {
+            s->ry -= (my - py) * m;
+        }
+
+        if (s->rx < 0) {
+            s->rx += RADIANS(360);
+        }
+
+        if (s->rx >= RADIANS(360)) {
+            s->rx -= RADIANS(360);
+        }
+
+        s->ry = MAX(s->ry, -RADIANS(90));
+        s->ry = MIN(s->ry, RADIANS(90));
+        px = mx;
+        py = my;
+    } else {
+        glfwGetCursorPos(g->window, &px, &py);
+    }
+
     // Handle Input
 }
 
