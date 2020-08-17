@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "noise.h"
 #include "tinycthread.h"
 
@@ -658,5 +659,124 @@ void m_game_update(double dt) {
     if (s->y < 0) {
          s->y = _highest_block(s->x, s->z) + 2;
     }
+
+    // Receive data from server
+
+    // Flush database
+
+    // Send position to server
+}
+
+int _chunk_distance(Chunk *chunk, int p, int q) {
+    int dp = ABS(chunk->p - p);
+    int dq = ABS(chunk->q - q);
+    return MAX(dp, dq);
+}
+
+void _delete_chunks() {
+    int count = g->chunk_count;
+    State *s1 = &g->players->state;
+    State *s2 = &(g->players + g->observe1)->state;
+    State *s3 = &(g->players + g->observe2)->state;
+    State *states[3] = {s1, s2, s3};
+    for (int i = 0; i < count; i++) {
+        Chunk *chunk = g->chunks + i;
+        int delete = 1;
+        for (int j = 0; j < 3; j++) {
+            State *s = states[j];
+            int p = _chunked(s->x);
+            int q = _chunked(s->z);
+            if (_chunk_distance(chunk, p, q) < g->delete_radius) {
+                delete = 0;
+                break;
+            }
+        }
+        if (delete) {
+            p_map_free(&chunk->map);
+            p_map_free(&chunk->lights);
+            g_sign_list_free(&chunk->signs);
+            m_util_buffer_del(chunk->buffer);
+            m_util_buffer_del(chunk->sign_buffer);
+            Chunk *other = g->chunks + (--count);
+            memcpy(chunk, other, sizeof(Chunk));
+        }
+    }
+    g->chunk_count = count;
+}
+
+GLuint _gen_player_buffer(float x, float y, float z, float rx, float ry) {
+    GLfloat *data = m_util_faces_malloc(10, 6);
+    g_cube_make_player(data, x, y, z, rx, ry);
+
+    return m_util_faces_gen(10, 6, data);
+}
+
+void _update_player(Player *player,
+    float x, float y, float z, float rx, float ry, int interpolate)
+{
+    if (interpolate) {
+        State *s1 = &player->state1;
+        State *s2 = &player->state2;
+        memcpy(s1, s2, sizeof(State));
+        s2->x = x; s2->y = y; s2->z = z; s2->rx = rx; s2->ry = ry;
+        s2->t = glfwGetTime();
+        if (s2->rx - s1->rx > PI) {
+            s1->rx += 2 * PI;
+        }
+        if (s1->rx - s2->rx > PI) {
+            s1->rx -= 2 * PI;
+        }
+    }
+    else {
+        State *s = &player->state;
+        s->x = x; s->y = y; s->z = z; s->rx = rx; s->ry = ry;
+        m_util_buffer_del(player->buffer);
+        player->buffer = _gen_player_buffer(s->x, s->y, s->z, s->rx, s->ry);
+    }
+}
+
+
+void _interpolate_player(Player *player) {
+    State *s1 = &player->state1;
+    State *s2 = &player->state2;
+    float t1 = s2->t - s1->t;
+    float t2 = glfwGetTime() - s2->t;
+    t1 = MIN(t1, 1);
+    t1 = MAX(t1, 0.1);
+    float p = MIN(t2 / t1, 1);
+    _update_player(
+        player,
+        s1->x + (s2->x - s1->x) * p,
+        s1->y + (s2->y - s1->y) * p,
+        s1->z + (s2->z - s1->z) * p,
+        s1->rx + (s2->rx - s1->rx) * p,
+        s1->ry + (s2->ry - s1->ry) * p,
+        0);
+}
+
+void m_game_render() {
+    State *s = &g->players->state;
+    Player *me = g->players;
+    // Prepare rendering
+    g->observe1 = g->observe1 % g->player_count;
+    g->observe2 = g->observe2 % g->player_count;
+
+    _delete_chunks();
+    m_util_buffer_del(me->buffer);
+    me->buffer = _gen_player_buffer(s->x, s->y, s->z, s->rx, s->ry);
+
+    for (int i = 1; i < g->player_count; ++i) {
+        _interpolate_player(g->players + i);
+    }
+
+    Player *player = g->players + g->observe1;
+
+    // Render 3D scene
+    // Render HUD
+    // Render Text
+    // Render Picture in Picture
+
+
+    // Swap and Poll
 }
 
