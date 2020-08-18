@@ -152,7 +152,11 @@ int m_game_init(
     void* callback_on_key,
     void* callback_on_char,
     void* clalback_on_mouse_button,
-    void* callback_on_scroll
+    void* callback_on_scroll,
+    Attrib *block,
+    Attrib *line,
+    Attrib *text,
+    Attrib *sky
 );
 
 void m_game_create();

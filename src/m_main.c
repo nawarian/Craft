@@ -1961,66 +1961,28 @@ int main(int argc, char **argv) {
         snprintf(g->d_db_path, MAX_PATH_LENGTH, "%s", DB_PATH);
     }
 
+    Attrib block_attrib = {0};
+    Attrib line_attrib = {0};
+    Attrib text_attrib = {0};
+    Attrib sky_attrib = {0};
+
     // @todo -> Move callbacks to m_game instead of passing here
     int init = m_game_init(
         &model,
         on_key,
         on_char,
         on_mouse_button,
-        on_scroll
+        on_scroll,
+        &block_attrib,
+        &line_attrib,
+        &text_attrib,
+        &sky_attrib
     );
 
     // Non-zero return, end here.
     if (init != 0) {
         return init;
     }
-
-    // LOAD SHADERS //
-    Attrib block_attrib = {0};
-    Attrib line_attrib = {0};
-    Attrib text_attrib = {0};
-    Attrib sky_attrib = {0};
-    GLuint program;
-
-    program = m_util_program_load(
-        "shaders/block_vertex.glsl", "shaders/block_fragment.glsl");
-    block_attrib.program = program;
-    block_attrib.position = glGetAttribLocation(program, "position");
-    block_attrib.normal = glGetAttribLocation(program, "normal");
-    block_attrib.uv = glGetAttribLocation(program, "uv");
-    block_attrib.matrix = glGetUniformLocation(program, "matrix");
-    block_attrib.sampler = glGetUniformLocation(program, "sampler");
-    block_attrib.extra1 = glGetUniformLocation(program, "sky_sampler");
-    block_attrib.extra2 = glGetUniformLocation(program, "daylight");
-    block_attrib.extra3 = glGetUniformLocation(program, "fog_distance");
-    block_attrib.extra4 = glGetUniformLocation(program, "ortho");
-    block_attrib.camera = glGetUniformLocation(program, "camera");
-    block_attrib.timer = glGetUniformLocation(program, "timer");
-
-    program = m_util_program_load(
-        "shaders/line_vertex.glsl", "shaders/line_fragment.glsl");
-    line_attrib.program = program;
-    line_attrib.position = glGetAttribLocation(program, "position");
-    line_attrib.matrix = glGetUniformLocation(program, "matrix");
-
-    program = m_util_program_load(
-        "shaders/text_vertex.glsl", "shaders/text_fragment.glsl");
-    text_attrib.program = program;
-    text_attrib.position = glGetAttribLocation(program, "position");
-    text_attrib.uv = glGetAttribLocation(program, "uv");
-    text_attrib.matrix = glGetUniformLocation(program, "matrix");
-    text_attrib.sampler = glGetUniformLocation(program, "sampler");
-    text_attrib.extra1 = glGetUniformLocation(program, "is_sign");
-
-    program = m_util_program_load(
-        "shaders/sky_vertex.glsl", "shaders/sky_fragment.glsl");
-    sky_attrib.program = program;
-    sky_attrib.position = glGetAttribLocation(program, "position");
-    sky_attrib.normal = glGetAttribLocation(program, "normal");
-    sky_attrib.uv = glGetAttribLocation(program, "uv");
-    sky_attrib.matrix = glGetUniformLocation(program, "matrix");
-    sky_attrib.sampler = glGetUniformLocation(program, "sampler");
-    sky_attrib.timer = glGetUniformLocation(program, "timer");
 
     // OUTER LOOP //
     int running = 1;

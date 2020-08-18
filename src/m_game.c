@@ -81,7 +81,48 @@ void _load_textures() {
 }
 
 // @todo
-void _load_shaders() {
+void _load_shaders(Attrib *block, Attrib *line, Attrib *text, Attrib *sky) {
+    GLuint program;
+
+    program = m_util_program_load(
+        "shaders/block_vertex.glsl", "shaders/block_fragment.glsl");
+    block->program = program;
+    block->position = glGetAttribLocation(program, "position");
+    block->normal = glGetAttribLocation(program, "normal");
+    block->uv = glGetAttribLocation(program, "uv");
+    block->matrix = glGetUniformLocation(program, "matrix");
+    block->sampler = glGetUniformLocation(program, "sampler");
+    block->extra1 = glGetUniformLocation(program, "sky_sampler");
+    block->extra2 = glGetUniformLocation(program, "daylight");
+    block->extra3 = glGetUniformLocation(program, "fog_distance");
+    block->extra4 = glGetUniformLocation(program, "ortho");
+    block->camera = glGetUniformLocation(program, "camera");
+    block->timer = glGetUniformLocation(program, "timer");
+
+    program = m_util_program_load(
+        "shaders/line_vertex.glsl", "shaders/line_fragment.glsl");
+    line->program = program;
+    line->position = glGetAttribLocation(program, "position");
+    line->matrix = glGetUniformLocation(program, "matrix");
+
+    program = m_util_program_load(
+        "shaders/text_vertex.glsl", "shaders/text_fragment.glsl");
+    text->program = program;
+    text->position = glGetAttribLocation(program, "position");
+    text->uv = glGetAttribLocation(program, "uv");
+    text->matrix = glGetUniformLocation(program, "matrix");
+    text->sampler = glGetUniformLocation(program, "sampler");
+    text->extra1 = glGetUniformLocation(program, "is_sign");
+
+    program = m_util_program_load(
+        "shaders/sky_vertex.glsl", "shaders/sky_fragment.glsl");
+    sky->program = program;
+    sky->position = glGetAttribLocation(program, "position");
+    sky->normal = glGetAttribLocation(program, "normal");
+    sky->uv = glGetAttribLocation(program, "uv");
+    sky->matrix = glGetUniformLocation(program, "matrix");
+    sky->sampler = glGetUniformLocation(program, "sampler");
+    sky->timer = glGetUniformLocation(program, "timer");
 }
 
 void light_fill(
@@ -375,7 +416,11 @@ int m_game_init(
     void* callback_on_key,
     void* callback_on_char,
     void* callback_on_mouse_button,
-    void* callback_on_scroll
+    void* callback_on_scroll,
+    Attrib *block,
+    Attrib *line,
+    Attrib *text,
+    Attrib *sky
 ) {
     // Sets model from m_main.c (refactor in progress...)
     g = model;
@@ -414,7 +459,7 @@ int m_game_init(
     glClearColor(0, 0, 0, 1);
 
     _load_textures();
-    _load_shaders();
+    _load_shaders(block, line, text, sky);
 
     g->create_radius = CREATE_CHUNK_RADIUS;
     g->render_radius = RENDER_CHUNK_RADIUS;
