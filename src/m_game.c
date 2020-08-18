@@ -25,6 +25,11 @@
 static Model model;
 static Model *g;
 
+static Attrib *block_attrib;
+static Attrib *line_attrib;
+static Attrib *text_attrib;
+static Attrib *sky_attrib;
+
 void _create_window() {
     int window_width = WINDOW_WIDTH;
     int window_height = WINDOW_HEIGHT;
@@ -80,8 +85,13 @@ void _load_textures() {
     m_util_texture_load_png("textures/sign.png");
 }
 
-// @todo
 void _load_shaders(Attrib *block, Attrib *line, Attrib *text, Attrib *sky) {
+    // Copy pointers to static variables
+    block_attrib = block;
+    line_attrib = line;
+    text_attrib = text;
+    sky_attrib = sky;
+
     GLuint program;
 
     program = m_util_program_load(
