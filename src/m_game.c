@@ -479,9 +479,6 @@ int m_game_init(
     return 0;
 }
 
-void m_game_create() {
-}
-
 void _get_motion_vector(
     int flying,
     int sz,

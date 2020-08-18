@@ -159,8 +159,6 @@ int m_game_init(
     Attrib *sky
 );
 
-void m_game_create();
-
 void m_game_update(double dt);
 
 void m_game_render();
