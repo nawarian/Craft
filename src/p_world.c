@@ -1,8 +1,8 @@
-#include "config.h"
+#include "g_config.h"
 #include "noise.h"
-#include "world.h"
+#include "p_world.h"
 
-void create_world(int p, int q, world_func func, void *arg) {
+void p_world_create(int p, int q, world_func func, void *arg) {
     int pad = 1;
     for (int dx = -pad; dx < CHUNK_SIZE + pad; dx++) {
         for (int dz = -pad; dz < CHUNK_SIZE + pad; dz++) {
@@ -75,3 +75,4 @@ void create_world(int p, int q, world_func func, void *arg) {
         }
     }
 }
+

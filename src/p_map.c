@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
-#include "map.h"
+#include "p_map.h"
 
 int hash_int(int key) {
     key = ~key + (key << 15);
@@ -19,7 +19,7 @@ int hash(int x, int y, int z) {
     return x ^ y ^ z;
 }
 
-void map_alloc(Map *map, int dx, int dy, int dz, int mask) {
+void p_map_alloc(Map *map, int dx, int dy, int dz, int mask) {
     map->dx = dx;
     map->dy = dy;
     map->dz = dz;
@@ -28,11 +28,11 @@ void map_alloc(Map *map, int dx, int dy, int dz, int mask) {
     map->data = (MapEntry *)calloc(map->mask + 1, sizeof(MapEntry));
 }
 
-void map_free(Map *map) {
+void p_map_free(Map *map) {
     free(map->data);
 }
 
-void map_copy(Map *dst, Map *src) {
+void p_map_copy(Map *dst, Map *src) {
     dst->dx = src->dx;
     dst->dy = src->dy;
     dst->dz = src->dz;
@@ -42,7 +42,7 @@ void map_copy(Map *dst, Map *src) {
     memcpy(dst->data, src->data, (dst->mask + 1) * sizeof(MapEntry));
 }
 
-int map_set(Map *map, int x, int y, int z, int w) {
+int p_map_set(Map *map, int x, int y, int z, int w) {
     unsigned int index = hash(x, y, z) & map->mask;
     x -= map->dx;
     y -= map->dy;
@@ -70,14 +70,14 @@ int map_set(Map *map, int x, int y, int z, int w) {
         entry->e.w = w;
         map->size++;
         if (map->size * 2 > map->mask) {
-            map_grow(map);
+            p_map_grow(map);
         }
         return 1;
     }
     return 0;
 }
 
-int map_get(Map *map, int x, int y, int z) {
+int p_map_get(Map *map, int x, int y, int z) {
     unsigned int index = hash(x, y, z) & map->mask;
     x -= map->dx;
     y -= map->dy;
@@ -96,7 +96,7 @@ int map_get(Map *map, int x, int y, int z) {
     return 0;
 }
 
-void map_grow(Map *map) {
+void p_map_grow(Map *map) {
     Map new_map;
     new_map.dx = map->dx;
     new_map.dy = map->dy;
@@ -105,7 +105,7 @@ void map_grow(Map *map) {
     new_map.size = 0;
     new_map.data = (MapEntry *)calloc(new_map.mask + 1, sizeof(MapEntry));
     MAP_FOR_EACH(map, ex, ey, ez, ew) {
-        map_set(&new_map, ex, ey, ez, ew);
+        p_map_set(&new_map, ex, ey, ez, ew);
     } END_MAP_FOR_EACH;
     free(map->data);
     map->mask = new_map.mask;

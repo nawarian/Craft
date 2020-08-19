@@ -6,152 +6,24 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "auth.h"
-#include "client.h"
-#include "config.h"
-#include "cube.h"
-#include "db.h"
-#include "item.h"
-#include "map.h"
-#include "matrix.h"
+
+// /deps
 #include "noise.h"
-#include "sign.h"
 #include "tinycthread.h"
-#include "util.h"
-#include "world.h"
 
-#define MAX_CHUNKS 8192
-#define MAX_PLAYERS 128
-#define WORKERS 4
-#define MAX_TEXT_LENGTH 256
-#define MAX_NAME_LENGTH 32
-#define MAX_PATH_LENGTH 256
-#define MAX_ADDR_LENGTH 256
-
-#define ALIGN_LEFT 0
-#define ALIGN_CENTER 1
-#define ALIGN_RIGHT 2
-
-#define MODE_OFFLINE 0
-#define MODE_ONLINE 1
-
-#define WORKER_IDLE 0
-#define WORKER_BUSY 1
-#define WORKER_DONE 2
-
-typedef struct {
-    Map map;
-    Map lights;
-    SignList signs;
-    int p;
-    int q;
-    int faces;
-    int sign_faces;
-    int dirty;
-    int miny;
-    int maxy;
-    GLuint buffer;
-    GLuint sign_buffer;
-} Chunk;
-
-typedef struct {
-    int p;
-    int q;
-    int load;
-    Map *block_maps[3][3];
-    Map *light_maps[3][3];
-    int miny;
-    int maxy;
-    int faces;
-    GLfloat *data;
-} WorkerItem;
-
-typedef struct {
-    int index;
-    int state;
-    thrd_t thrd;
-    mtx_t mtx;
-    cnd_t cnd;
-    WorkerItem item;
-} Worker;
-
-typedef struct {
-    int x;
-    int y;
-    int z;
-    int w;
-} Block;
-
-typedef struct {
-    float x;
-    float y;
-    float z;
-    float rx;
-    float ry;
-    float t;
-} State;
-
-typedef struct {
-    int id;
-    char name[MAX_NAME_LENGTH];
-    State state;
-    State state1;
-    State state2;
-    GLuint buffer;
-} Player;
-
-typedef struct {
-    GLuint program;
-    GLuint position;
-    GLuint normal;
-    GLuint uv;
-    GLuint matrix;
-    GLuint sampler;
-    GLuint camera;
-    GLuint timer;
-    GLuint extra1;
-    GLuint extra2;
-    GLuint extra3;
-    GLuint extra4;
-} Attrib;
-
-typedef struct {
-    GLFWwindow *window;
-    Worker workers[WORKERS];
-    Chunk chunks[MAX_CHUNKS];
-    int chunk_count;
-    int create_radius;
-    int render_radius;
-    int delete_radius;
-    int sign_radius;
-    Player players[MAX_PLAYERS];
-    int player_count;
-    int typing;
-    char typing_buffer[MAX_TEXT_LENGTH];
-    int message_index;
-    char messages[MAX_MESSAGES][MAX_TEXT_LENGTH];
-    int width;
-    int height;
-    int observe1;
-    int observe2;
-    int flying;
-    int item_index;
-    int scale;
-    int ortho;
-    float fov;
-    int suppress_char;
-    int mode;
-    int mode_changed;
-    char db_path[MAX_PATH_LENGTH];
-    char server_addr[MAX_ADDR_LENGTH];
-    int server_port;
-    int day_length;
-    int time_changed;
-    Block block0;
-    Block block1;
-    Block copy0;
-    Block copy1;
-} Model;
+// /src
+#include "d_db.h"
+#include "g_config.h"
+#include "g_cube.h"
+#include "g_item.h"
+#include "g_matrix.h"
+#include "g_sign.h"
+#include "m_game.h"
+#include "m_util.h"
+#include "n_auth.h"
+#include "n_client.h"
+#include "p_map.h"
+#include "p_world.h"
 
 static Model model;
 static Model *g = &model;
@@ -201,36 +73,6 @@ void get_sight_vector(float rx, float ry, float *vx, float *vy, float *vz) {
     *vz = sinf(rx - RADIANS(90)) * m;
 }
 
-void get_motion_vector(int flying, int sz, int sx, float rx, float ry,
-    float *vx, float *vy, float *vz) {
-    *vx = 0; *vy = 0; *vz = 0;
-    if (!sz && !sx) {
-        return;
-    }
-    float strafe = atan2f(sz, sx);
-    if (flying) {
-        float m = cosf(ry);
-        float y = sinf(ry);
-        if (sx) {
-            if (!sz) {
-                y = 0;
-            }
-            m = 1;
-        }
-        if (sz > 0) {
-            y = -y;
-        }
-        *vx = cosf(rx + strafe) * m;
-        *vy = y;
-        *vz = sinf(rx + strafe) * m;
-    }
-    else {
-        *vx = cosf(rx + strafe);
-        *vy = 0;
-        *vz = sinf(rx + strafe);
-    }
-}
-
 GLuint gen_crosshair_buffer() {
     int x = g->width / 2;
     int y = g->height / 2;
@@ -239,23 +81,23 @@ GLuint gen_crosshair_buffer() {
         x, y - p, x, y + p,
         x - p, y, x + p, y
     };
-    return gen_buffer(sizeof(data), data);
+    return m_util_buffer_gen(sizeof(data), data);
 }
 
 GLuint gen_wireframe_buffer(float x, float y, float z, float n) {
     float data[72];
-    make_cube_wireframe(data, x, y, z, n);
-    return gen_buffer(sizeof(data), data);
+    g_cube_make_wireframe(data, x, y, z, n);
+    return m_util_buffer_gen(sizeof(data), data);
 }
 
 GLuint gen_sky_buffer() {
     float data[12288];
-    make_sphere(data, 1, 3);
-    return gen_buffer(sizeof(data), data);
+    g_cube_make_sphere(data, 1, 3);
+    return m_util_buffer_gen(sizeof(data), data);
 }
 
 GLuint gen_cube_buffer(float x, float y, float z, float n, int w) {
-    GLfloat *data = malloc_faces(10, 6);
+    GLfloat *data = m_util_faces_malloc(10, 6);
     float ao[6][4] = {0};
     float light[6][4] = {
         {0.5, 0.5, 0.5, 0.5},
@@ -265,32 +107,32 @@ GLuint gen_cube_buffer(float x, float y, float z, float n, int w) {
         {0.5, 0.5, 0.5, 0.5},
         {0.5, 0.5, 0.5, 0.5}
     };
-    make_cube(data, ao, light, 1, 1, 1, 1, 1, 1, x, y, z, n, w);
-    return gen_faces(10, 6, data);
+    g_cube_make_cube(data, ao, light, 1, 1, 1, 1, 1, 1, x, y, z, n, w);
+    return m_util_faces_gen(10, 6, data);
 }
 
 GLuint gen_plant_buffer(float x, float y, float z, float n, int w) {
-    GLfloat *data = malloc_faces(10, 4);
+    GLfloat *data = m_util_faces_malloc(10, 4);
     float ao = 0;
     float light = 1;
-    make_plant(data, ao, light, x, y, z, n, w, 45);
-    return gen_faces(10, 4, data);
+    g_cube_make_plant(data, ao, light, x, y, z, n, w, 45);
+    return m_util_faces_gen(10, 4, data);
 }
 
 GLuint gen_player_buffer(float x, float y, float z, float rx, float ry) {
-    GLfloat *data = malloc_faces(10, 6);
-    make_player(data, x, y, z, rx, ry);
-    return gen_faces(10, 6, data);
+    GLfloat *data = m_util_faces_malloc(10, 6);
+    g_cube_make_player(data, x, y, z, rx, ry);
+    return m_util_faces_gen(10, 6, data);
 }
 
 GLuint gen_text_buffer(float x, float y, float n, char *text) {
     int length = strlen(text);
-    GLfloat *data = malloc_faces(4, length);
+    GLfloat *data = m_util_faces_malloc(4, length);
     for (int i = 0; i < length; i++) {
-        make_character(data + i * 24, x, y, n / 2, n, text[i]);
+        g_cube_make_character(data + i * 24, x, y, n / 2, n, text[i]);
         x += n;
     }
-    return gen_faces(4, length, data);
+    return m_util_faces_gen(4, length, data);
 }
 
 void draw_triangles_3d_ao(Attrib *attrib, GLuint buffer, int count) {
@@ -437,27 +279,9 @@ void update_player(Player *player,
     else {
         State *s = &player->state;
         s->x = x; s->y = y; s->z = z; s->rx = rx; s->ry = ry;
-        del_buffer(player->buffer);
+        m_util_buffer_del(player->buffer);
         player->buffer = gen_player_buffer(s->x, s->y, s->z, s->rx, s->ry);
     }
-}
-
-void interpolate_player(Player *player) {
-    State *s1 = &player->state1;
-    State *s2 = &player->state2;
-    float t1 = s2->t - s1->t;
-    float t2 = glfwGetTime() - s2->t;
-    t1 = MIN(t1, 1);
-    t1 = MAX(t1, 0.1);
-    float p = MIN(t2 / t1, 1);
-    update_player(
-        player,
-        s1->x + (s2->x - s1->x) * p,
-        s1->y + (s2->y - s1->y) * p,
-        s1->z + (s2->z - s1->z) * p,
-        s1->rx + (s2->rx - s1->rx) * p,
-        s1->ry + (s2->ry - s1->ry) * p,
-        0);
 }
 
 void delete_player(int id) {
@@ -466,7 +290,7 @@ void delete_player(int id) {
         return;
     }
     int count = g->player_count;
-    del_buffer(player->buffer);
+    m_util_buffer_del(player->buffer);
     Player *other = g->players + (--count);
     memcpy(player, other, sizeof(Player));
     g->player_count = count;
@@ -475,7 +299,7 @@ void delete_player(int id) {
 void delete_all_players() {
     for (int i = 0; i < g->player_count; i++) {
         Player *player = g->players + i;
-        del_buffer(player->buffer);
+        m_util_buffer_del(player->buffer);
     }
     g->player_count = 0;
 }
@@ -592,7 +416,7 @@ int highest_block(float x, float z) {
     if (chunk) {
         Map *map = &chunk->map;
         MAP_FOR_EACH(map, ex, ey, ez, ew) {
-            if (is_obstacle(ew) && ex == nx && ez == nz) {
+            if (g_item_is_obstacle(ew) && ex == nx && ez == nz) {
                 result = MAX(result, ey);
             }
         } END_MAP_FOR_EACH;
@@ -615,7 +439,7 @@ int _hit_test(
         int ny = roundf(y);
         int nz = roundf(z);
         if (nx != px || ny != py || nz != pz) {
-            int hw = map_get(map, nx, ny, nz);
+            int hw = p_map_get(map, nx, ny, nz);
             if (hw > 0) {
                 if (previous) {
                     *hx = px; *hy = py; *hz = pz;
@@ -666,7 +490,7 @@ int hit_test(
 int hit_test_face(Player *player, int *x, int *y, int *z, int *face) {
     State *s = &player->state;
     int w = hit_test(0, s->x, s->y, s->z, s->rx, s->ry, x, y, z);
-    if (is_obstacle(w)) {
+    if (g_item_is_obstacle(w)) {
         int hx, hy, hz;
         hit_test(1, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
         int dx = hx - *x;
@@ -694,47 +518,6 @@ int hit_test_face(Player *player, int *x, int *y, int *z, int *face) {
         }
     }
     return 0;
-}
-
-int collide(int height, float *x, float *y, float *z) {
-    int result = 0;
-    int p = chunked(*x);
-    int q = chunked(*z);
-    Chunk *chunk = find_chunk(p, q);
-    if (!chunk) {
-        return result;
-    }
-    Map *map = &chunk->map;
-    int nx = roundf(*x);
-    int ny = roundf(*y);
-    int nz = roundf(*z);
-    float px = *x - nx;
-    float py = *y - ny;
-    float pz = *z - nz;
-    float pad = 0.25;
-    for (int dy = 0; dy < height; dy++) {
-        if (px < -pad && is_obstacle(map_get(map, nx - 1, ny - dy, nz))) {
-            *x = nx - pad;
-        }
-        if (px > pad && is_obstacle(map_get(map, nx + 1, ny - dy, nz))) {
-            *x = nx + pad;
-        }
-        if (py < -pad && is_obstacle(map_get(map, nx, ny - dy - 1, nz))) {
-            *y = ny - pad;
-            result = 1;
-        }
-        if (py > pad && is_obstacle(map_get(map, nx, ny - dy + 1, nz))) {
-            *y = ny + pad;
-            result = 1;
-        }
-        if (pz < -pad && is_obstacle(map_get(map, nx, ny - dy, nz - 1))) {
-            *z = nz - pad;
-        }
-        if (pz > pad && is_obstacle(map_get(map, nx, ny - dy, nz + 1))) {
-            *z = nz + pad;
-        }
-    }
-    return result;
 }
 
 int player_intersects_block(
@@ -768,7 +551,7 @@ int _gen_sign_buffer(
     float max_width = 64;
     float line_height = 1.25;
     char lines[1024];
-    int rows = wrap(text, max_width, lines, 1024);
+    int rows = m_util_wrap(text, max_width, lines, 1024);
     rows = MIN(rows, 5);
     int dx = glyph_dx[face];
     int dz = glyph_dz[face];
@@ -780,16 +563,16 @@ int _gen_sign_buffer(
     float sy = y - n * (rows - 1) * (line_height / 2) * ldy;
     float sz = z - n * (rows - 1) * (line_height / 2) * ldz;
     char *key;
-    char *line = tokenize(lines, "\n", &key);
+    char *line = m_util_tokenize(lines, "\n", &key);
     while (line) {
         int length = strlen(line);
-        int line_width = string_width(line);
+        int line_width = m_util_string_width(line);
         line_width = MIN(line_width, max_width);
         float rx = sx - dx * line_width / max_width / 2;
         float ry = sy;
         float rz = sz - dz * line_width / max_width / 2;
         for (int i = 0; i < length; i++) {
-            int width = char_width(line[i]);
+            int width = m_util_char_width(line[i]);
             line_width -= width;
             if (line_width < 0) {
                 break;
@@ -797,7 +580,7 @@ int _gen_sign_buffer(
             rx += dx * width / max_width / 2;
             rz += dz * width / max_width / 2;
             if (line[i] != ' ') {
-                make_character_3d(
+                g_cube_make_character_3d(
                     data + count * 30, rx, ry, rz, n / 2, face, line[i]);
                 count++;
             }
@@ -807,7 +590,7 @@ int _gen_sign_buffer(
         sx += n * line_height * ldx;
         sy += n * line_height * ldy;
         sz += n * line_height * ldz;
-        line = tokenize(NULL, "\n", &key);
+        line = m_util_tokenize(NULL, "\n", &key);
         rows--;
         if (rows <= 0) {
             break;
@@ -827,7 +610,7 @@ void gen_sign_buffer(Chunk *chunk) {
     }
 
     // second pass - generate geometry
-    GLfloat *data = malloc_faces(5, max_faces);
+    GLfloat *data = m_util_faces_malloc(5, max_faces);
     int faces = 0;
     for (int i = 0; i < signs->size; i++) {
         Sign *e = signs->data + i;
@@ -835,8 +618,8 @@ void gen_sign_buffer(Chunk *chunk) {
             data + faces * 30, e->x, e->y, e->z, e->face, e->text);
     }
 
-    del_buffer(chunk->sign_buffer);
-    chunk->sign_buffer = gen_faces(5, faces, data);
+    m_util_buffer_del(chunk->sign_buffer);
+    chunk->sign_buffer = m_util_faces_gen(5, faces, data);
     chunk->sign_faces = faces;
 }
 
@@ -876,269 +659,12 @@ void dirty_chunk(Chunk *chunk) {
     }
 }
 
-void occlusion(
-    char neighbors[27], char lights[27], float shades[27],
-    float ao[6][4], float light[6][4])
-{
-    static const int lookup3[6][4][3] = {
-        {{0, 1, 3}, {2, 1, 5}, {6, 3, 7}, {8, 5, 7}},
-        {{18, 19, 21}, {20, 19, 23}, {24, 21, 25}, {26, 23, 25}},
-        {{6, 7, 15}, {8, 7, 17}, {24, 15, 25}, {26, 17, 25}},
-        {{0, 1, 9}, {2, 1, 11}, {18, 9, 19}, {20, 11, 19}},
-        {{0, 3, 9}, {6, 3, 15}, {18, 9, 21}, {24, 15, 21}},
-        {{2, 5, 11}, {8, 5, 17}, {20, 11, 23}, {26, 17, 23}}
-    };
-   static const int lookup4[6][4][4] = {
-        {{0, 1, 3, 4}, {1, 2, 4, 5}, {3, 4, 6, 7}, {4, 5, 7, 8}},
-        {{18, 19, 21, 22}, {19, 20, 22, 23}, {21, 22, 24, 25}, {22, 23, 25, 26}},
-        {{6, 7, 15, 16}, {7, 8, 16, 17}, {15, 16, 24, 25}, {16, 17, 25, 26}},
-        {{0, 1, 9, 10}, {1, 2, 10, 11}, {9, 10, 18, 19}, {10, 11, 19, 20}},
-        {{0, 3, 9, 12}, {3, 6, 12, 15}, {9, 12, 18, 21}, {12, 15, 21, 24}},
-        {{2, 5, 11, 14}, {5, 8, 14, 17}, {11, 14, 20, 23}, {14, 17, 23, 26}}
-    };
-    static const float curve[4] = {0.0, 0.25, 0.5, 0.75};
-    for (int i = 0; i < 6; i++) {
-        for (int j = 0; j < 4; j++) {
-            int corner = neighbors[lookup3[i][j][0]];
-            int side1 = neighbors[lookup3[i][j][1]];
-            int side2 = neighbors[lookup3[i][j][2]];
-            int value = side1 && side2 ? 3 : corner + side1 + side2;
-            float shade_sum = 0;
-            float light_sum = 0;
-            int is_light = lights[13] == 15;
-            for (int k = 0; k < 4; k++) {
-                shade_sum += shades[lookup4[i][j][k]];
-                light_sum += lights[lookup4[i][j][k]];
-            }
-            if (is_light) {
-                light_sum = 15 * 4 * 10;
-            }
-            float total = curve[value] + shade_sum / 4.0;
-            ao[i][j] = MIN(total, 1.0);
-            light[i][j] = light_sum / 15.0 / 4.0;
-        }
-    }
-}
-
-#define XZ_SIZE (CHUNK_SIZE * 3 + 2)
-#define XZ_LO (CHUNK_SIZE)
-#define XZ_HI (CHUNK_SIZE * 2 + 1)
-#define Y_SIZE 258
-#define XYZ(x, y, z) ((y) * XZ_SIZE * XZ_SIZE + (x) * XZ_SIZE + (z))
-#define XZ(x, z) ((x) * XZ_SIZE + (z))
-
-void light_fill(
-    char *opaque, char *light,
-    int x, int y, int z, int w, int force)
-{
-    if (x + w < XZ_LO || z + w < XZ_LO) {
-        return;
-    }
-    if (x - w > XZ_HI || z - w > XZ_HI) {
-        return;
-    }
-    if (y < 0 || y >= Y_SIZE) {
-        return;
-    }
-    if (light[XYZ(x, y, z)] >= w) {
-        return;
-    }
-    if (!force && opaque[XYZ(x, y, z)]) {
-        return;
-    }
-    light[XYZ(x, y, z)] = w--;
-    light_fill(opaque, light, x - 1, y, z, w, 0);
-    light_fill(opaque, light, x + 1, y, z, w, 0);
-    light_fill(opaque, light, x, y - 1, z, w, 0);
-    light_fill(opaque, light, x, y + 1, z, w, 0);
-    light_fill(opaque, light, x, y, z - 1, w, 0);
-    light_fill(opaque, light, x, y, z + 1, w, 0);
-}
-
-void compute_chunk(WorkerItem *item) {
-    char *opaque = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
-    char *light = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
-    char *highest = (char *)calloc(XZ_SIZE * XZ_SIZE, sizeof(char));
-
-    int ox = item->p * CHUNK_SIZE - CHUNK_SIZE - 1;
-    int oy = -1;
-    int oz = item->q * CHUNK_SIZE - CHUNK_SIZE - 1;
-
-    // check for lights
-    int has_light = 0;
-    if (SHOW_LIGHTS) {
-        for (int a = 0; a < 3; a++) {
-            for (int b = 0; b < 3; b++) {
-                Map *map = item->light_maps[a][b];
-                if (map && map->size) {
-                    has_light = 1;
-                }
-            }
-        }
-    }
-
-    // populate opaque array
-    for (int a = 0; a < 3; a++) {
-        for (int b = 0; b < 3; b++) {
-            Map *map = item->block_maps[a][b];
-            if (!map) {
-                continue;
-            }
-            MAP_FOR_EACH(map, ex, ey, ez, ew) {
-                int x = ex - ox;
-                int y = ey - oy;
-                int z = ez - oz;
-                int w = ew;
-                // TODO: this should be unnecessary
-                if (x < 0 || y < 0 || z < 0) {
-                    continue;
-                }
-                if (x >= XZ_SIZE || y >= Y_SIZE || z >= XZ_SIZE) {
-                    continue;
-                }
-                // END TODO
-                opaque[XYZ(x, y, z)] = !is_transparent(w);
-                if (opaque[XYZ(x, y, z)]) {
-                    highest[XZ(x, z)] = MAX(highest[XZ(x, z)], y);
-                }
-            } END_MAP_FOR_EACH;
-        }
-    }
-
-    // flood fill light intensities
-    if (has_light) {
-        for (int a = 0; a < 3; a++) {
-            for (int b = 0; b < 3; b++) {
-                Map *map = item->light_maps[a][b];
-                if (!map) {
-                    continue;
-                }
-                MAP_FOR_EACH(map, ex, ey, ez, ew) {
-                    int x = ex - ox;
-                    int y = ey - oy;
-                    int z = ez - oz;
-                    light_fill(opaque, light, x, y, z, ew, 1);
-                } END_MAP_FOR_EACH;
-            }
-        }
-    }
-
-    Map *map = item->block_maps[1][1];
-
-    // count exposed faces
-    int miny = 256;
-    int maxy = 0;
-    int faces = 0;
-    MAP_FOR_EACH(map, ex, ey, ez, ew) {
-        if (ew <= 0) {
-            continue;
-        }
-        int x = ex - ox;
-        int y = ey - oy;
-        int z = ez - oz;
-        int f1 = !opaque[XYZ(x - 1, y, z)];
-        int f2 = !opaque[XYZ(x + 1, y, z)];
-        int f3 = !opaque[XYZ(x, y + 1, z)];
-        int f4 = !opaque[XYZ(x, y - 1, z)] && (ey > 0);
-        int f5 = !opaque[XYZ(x, y, z - 1)];
-        int f6 = !opaque[XYZ(x, y, z + 1)];
-        int total = f1 + f2 + f3 + f4 + f5 + f6;
-        if (total == 0) {
-            continue;
-        }
-        if (is_plant(ew)) {
-            total = 4;
-        }
-        miny = MIN(miny, ey);
-        maxy = MAX(maxy, ey);
-        faces += total;
-    } END_MAP_FOR_EACH;
-
-    // generate geometry
-    GLfloat *data = malloc_faces(10, faces);
-    int offset = 0;
-    MAP_FOR_EACH(map, ex, ey, ez, ew) {
-        if (ew <= 0) {
-            continue;
-        }
-        int x = ex - ox;
-        int y = ey - oy;
-        int z = ez - oz;
-        int f1 = !opaque[XYZ(x - 1, y, z)];
-        int f2 = !opaque[XYZ(x + 1, y, z)];
-        int f3 = !opaque[XYZ(x, y + 1, z)];
-        int f4 = !opaque[XYZ(x, y - 1, z)] && (ey > 0);
-        int f5 = !opaque[XYZ(x, y, z - 1)];
-        int f6 = !opaque[XYZ(x, y, z + 1)];
-        int total = f1 + f2 + f3 + f4 + f5 + f6;
-        if (total == 0) {
-            continue;
-        }
-        char neighbors[27] = {0};
-        char lights[27] = {0};
-        float shades[27] = {0};
-        int index = 0;
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    neighbors[index] = opaque[XYZ(x + dx, y + dy, z + dz)];
-                    lights[index] = light[XYZ(x + dx, y + dy, z + dz)];
-                    shades[index] = 0;
-                    if (y + dy <= highest[XZ(x + dx, z + dz)]) {
-                        for (int oy = 0; oy < 8; oy++) {
-                            if (opaque[XYZ(x + dx, y + dy + oy, z + dz)]) {
-                                shades[index] = 1.0 - oy * 0.125;
-                                break;
-                            }
-                        }
-                    }
-                    index++;
-                }
-            }
-        }
-        float ao[6][4];
-        float light[6][4];
-        occlusion(neighbors, lights, shades, ao, light);
-        if (is_plant(ew)) {
-            total = 4;
-            float min_ao = 1;
-            float max_light = 0;
-            for (int a = 0; a < 6; a++) {
-                for (int b = 0; b < 4; b++) {
-                    min_ao = MIN(min_ao, ao[a][b]);
-                    max_light = MAX(max_light, light[a][b]);
-                }
-            }
-            float rotation = simplex2(ex, ez, 4, 0.5, 2) * 360;
-            make_plant(
-                data + offset, min_ao, max_light,
-                ex, ey, ez, 0.5, ew, rotation);
-        }
-        else {
-            make_cube(
-                data + offset, ao, light,
-                f1, f2, f3, f4, f5, f6,
-                ex, ey, ez, 0.5, ew);
-        }
-        offset += total * 60;
-    } END_MAP_FOR_EACH;
-
-    free(opaque);
-    free(light);
-    free(highest);
-
-    item->miny = miny;
-    item->maxy = maxy;
-    item->faces = faces;
-    item->data = data;
-}
-
 void generate_chunk(Chunk *chunk, WorkerItem *item) {
     chunk->miny = item->miny;
     chunk->maxy = item->maxy;
     chunk->faces = item->faces;
-    del_buffer(chunk->buffer);
-    chunk->buffer = gen_faces(10, item->faces, item->data);
+    m_util_buffer_del(chunk->buffer);
+    chunk->buffer = m_util_faces_gen(10, item->faces, item->data);
     gen_sign_buffer(chunk);
 }
 
@@ -1163,29 +689,20 @@ void gen_chunk_buffer(Chunk *chunk) {
             }
         }
     }
-    compute_chunk(item);
+    m_game_compute_chunk(item);
     generate_chunk(chunk, item);
     chunk->dirty = 0;
 }
 
-void map_set_func(int x, int y, int z, int w, void *arg) {
+void p_map_set_func(int x, int y, int z, int w, void *arg) {
     Map *map = (Map *)arg;
-    map_set(map, x, y, z, w);
+    p_map_set(map, x, y, z, w);
 }
 
-void load_chunk(WorkerItem *item) {
-    int p = item->p;
-    int q = item->q;
-    Map *block_map = item->block_maps[1][1];
-    Map *light_map = item->light_maps[1][1];
-    create_world(p, q, map_set_func, block_map);
-    db_load_blocks(block_map, p, q);
-    db_load_lights(light_map, p, q);
-}
 
 void request_chunk(int p, int q) {
-    int key = db_get_key(p, q);
-    client_chunk(p, q, key);
+    int key = d_db_get_key(p, q);
+    n_client_chunk(p, q, key);
 }
 
 void init_chunk(Chunk *chunk, int p, int q) {
@@ -1197,15 +714,15 @@ void init_chunk(Chunk *chunk, int p, int q) {
     chunk->sign_buffer = 0;
     dirty_chunk(chunk);
     SignList *signs = &chunk->signs;
-    sign_list_alloc(signs, 16);
-    db_load_signs(signs, p, q);
+    g_sign_list_alloc(signs, 16);
+    d_db_load_signs(signs, p, q);
     Map *block_map = &chunk->map;
     Map *light_map = &chunk->lights;
     int dx = p * CHUNK_SIZE - 1;
     int dy = 0;
     int dz = q * CHUNK_SIZE - 1;
-    map_alloc(block_map, dx, dy, dz, 0x7fff);
-    map_alloc(light_map, dx, dy, dz, 0xf);
+    p_map_alloc(block_map, dx, dy, dz, 0x7fff);
+    p_map_alloc(light_map, dx, dy, dz, 0xf);
 }
 
 void create_chunk(Chunk *chunk, int p, int q) {
@@ -1217,7 +734,7 @@ void create_chunk(Chunk *chunk, int p, int q) {
     item->q = chunk->q;
     item->block_maps[1][1] = &chunk->map;
     item->light_maps[1][1] = &chunk->lights;
-    load_chunk(item);
+    m_game_load_chunk(item);
 
     request_chunk(p, q);
 }
@@ -1241,11 +758,11 @@ void delete_chunks() {
             }
         }
         if (delete) {
-            map_free(&chunk->map);
-            map_free(&chunk->lights);
-            sign_list_free(&chunk->signs);
-            del_buffer(chunk->buffer);
-            del_buffer(chunk->sign_buffer);
+            p_map_free(&chunk->map);
+            p_map_free(&chunk->lights);
+            g_sign_list_free(&chunk->signs);
+            m_util_buffer_del(chunk->buffer);
+            m_util_buffer_del(chunk->sign_buffer);
             Chunk *other = g->chunks + (--count);
             memcpy(chunk, other, sizeof(Chunk));
         }
@@ -1256,11 +773,11 @@ void delete_chunks() {
 void delete_all_chunks() {
     for (int i = 0; i < g->chunk_count; i++) {
         Chunk *chunk = g->chunks + i;
-        map_free(&chunk->map);
-        map_free(&chunk->lights);
-        sign_list_free(&chunk->signs);
-        del_buffer(chunk->buffer);
-        del_buffer(chunk->sign_buffer);
+        p_map_free(&chunk->map);
+        p_map_free(&chunk->lights);
+        g_sign_list_free(&chunk->signs);
+        m_util_buffer_del(chunk->buffer);
+        m_util_buffer_del(chunk->sign_buffer);
     }
     g->chunk_count = 0;
 }
@@ -1276,10 +793,10 @@ void check_workers() {
                 if (item->load) {
                     Map *block_map = item->block_maps[1][1];
                     Map *light_map = item->light_maps[1][1];
-                    map_free(&chunk->map);
-                    map_free(&chunk->lights);
-                    map_copy(&chunk->map, block_map);
-                    map_copy(&chunk->lights, light_map);
+                    p_map_free(&chunk->map);
+                    p_map_free(&chunk->lights);
+                    p_map_copy(&chunk->map, block_map);
+                    p_map_copy(&chunk->lights, light_map);
                     request_chunk(item->p, item->q);
                 }
                 generate_chunk(chunk, item);
@@ -1289,11 +806,11 @@ void check_workers() {
                     Map *block_map = item->block_maps[a][b];
                     Map *light_map = item->light_maps[a][b];
                     if (block_map) {
-                        map_free(block_map);
+                        p_map_free(block_map);
                         free(block_map);
                     }
                     if (light_map) {
-                        map_free(light_map);
+                        p_map_free(light_map);
                         free(light_map);
                     }
                 }
@@ -1331,11 +848,11 @@ void force_chunks(Player *player) {
 void ensure_chunks_worker(Player *player, Worker *worker) {
     State *s = &player->state;
     float matrix[16];
-    set_matrix_3d(
+    g_mat_set_3d(
         matrix, g->width, g->height,
         s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->render_radius);
     float planes[6][4];
-    frustum_planes(planes, g->render_radius, matrix);
+    g_mat_frustum_planes(planes, g->render_radius, matrix);
     int p = chunked(s->x);
     int q = chunked(s->z);
     int r = g->create_radius;
@@ -1398,9 +915,9 @@ void ensure_chunks_worker(Player *player, Worker *worker) {
             }
             if (other) {
                 Map *block_map = malloc(sizeof(Map));
-                map_copy(block_map, &other->map);
+                p_map_copy(block_map, &other->map);
                 Map *light_map = malloc(sizeof(Map));
-                map_copy(light_map, &other->lights);
+                p_map_copy(light_map, &other->lights);
                 item->block_maps[dp + 1][dq + 1] = block_map;
                 item->light_maps[dp + 1][dq + 1] = light_map;
             }
@@ -1428,40 +945,19 @@ void ensure_chunks(Player *player) {
     }
 }
 
-int worker_run(void *arg) {
-    Worker *worker = (Worker *)arg;
-    int running = 1;
-    while (running) {
-        mtx_lock(&worker->mtx);
-        while (worker->state != WORKER_BUSY) {
-            cnd_wait(&worker->cnd, &worker->mtx);
-        }
-        mtx_unlock(&worker->mtx);
-        WorkerItem *item = &worker->item;
-        if (item->load) {
-            load_chunk(item);
-        }
-        compute_chunk(item);
-        mtx_lock(&worker->mtx);
-        worker->state = WORKER_DONE;
-        mtx_unlock(&worker->mtx);
-    }
-    return 0;
-}
-
 void unset_sign(int x, int y, int z) {
     int p = chunked(x);
     int q = chunked(z);
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         SignList *signs = &chunk->signs;
-        if (sign_list_remove_all(signs, x, y, z)) {
+        if (g_sign_list_remove_all(signs, x, y, z)) {
             chunk->dirty = 1;
-            db_delete_signs(x, y, z);
+            d_db_delete_signs(x, y, z);
         }
     }
     else {
-        db_delete_signs(x, y, z);
+        d_db_delete_signs(x, y, z);
     }
 }
 
@@ -1471,13 +967,13 @@ void unset_sign_face(int x, int y, int z, int face) {
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         SignList *signs = &chunk->signs;
-        if (sign_list_remove(signs, x, y, z, face)) {
+        if (g_sign_list_remove(signs, x, y, z, face)) {
             chunk->dirty = 1;
-            db_delete_sign(x, y, z, face);
+            d_db_delete_sign(x, y, z, face);
         }
     }
     else {
-        db_delete_sign(x, y, z, face);
+        d_db_delete_sign(x, y, z, face);
     }
 }
 
@@ -1491,19 +987,19 @@ void _set_sign(
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         SignList *signs = &chunk->signs;
-        sign_list_add(signs, x, y, z, face, text);
+        g_sign_list_add(signs, x, y, z, face, text);
         if (dirty) {
             chunk->dirty = 1;
         }
     }
-    db_insert_sign(p, q, x, y, z, face, text);
+    d_db_insert_sign(p, q, x, y, z, face, text);
 }
 
 void set_sign(int x, int y, int z, int face, const char *text) {
     int p = chunked(x);
     int q = chunked(z);
     _set_sign(p, q, x, y, z, face, text, 1);
-    client_sign(x, y, z, face, text);
+    n_client_sign(x, y, z, face, text);
 }
 
 void toggle_light(int x, int y, int z) {
@@ -1512,10 +1008,10 @@ void toggle_light(int x, int y, int z) {
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         Map *map = &chunk->lights;
-        int w = map_get(map, x, y, z) ? 0 : 15;
-        map_set(map, x, y, z, w);
-        db_insert_light(p, q, x, y, z, w);
-        client_light(x, y, z, w);
+        int w = p_map_get(map, x, y, z) ? 0 : 15;
+        p_map_set(map, x, y, z, w);
+        d_db_insert_light(p, q, x, y, z, w);
+        n_client_light(x, y, z, w);
         dirty_chunk(chunk);
     }
 }
@@ -1524,13 +1020,13 @@ void set_light(int p, int q, int x, int y, int z, int w) {
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         Map *map = &chunk->lights;
-        if (map_set(map, x, y, z, w)) {
+        if (p_map_set(map, x, y, z, w)) {
             dirty_chunk(chunk);
-            db_insert_light(p, q, x, y, z, w);
+            d_db_insert_light(p, q, x, y, z, w);
         }
     }
     else {
-        db_insert_light(p, q, x, y, z, w);
+        d_db_insert_light(p, q, x, y, z, w);
     }
 }
 
@@ -1538,15 +1034,15 @@ void _set_block(int p, int q, int x, int y, int z, int w, int dirty) {
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         Map *map = &chunk->map;
-        if (map_set(map, x, y, z, w)) {
+        if (p_map_set(map, x, y, z, w)) {
             if (dirty) {
                 dirty_chunk(chunk);
             }
-            db_insert_block(p, q, x, y, z, w);
+            d_db_insert_block(p, q, x, y, z, w);
         }
     }
     else {
-        db_insert_block(p, q, x, y, z, w);
+        d_db_insert_block(p, q, x, y, z, w);
     }
     if (w == 0 && chunked(x) == p && chunked(z) == q) {
         unset_sign(x, y, z);
@@ -1572,7 +1068,7 @@ void set_block(int x, int y, int z, int w) {
             _set_block(p + dx, q + dz, x, y, z, -w, 1);
         }
     }
-    client_block(x, y, z, w);
+    n_client_block(x, y, z, w);
 }
 
 void record_block(int x, int y, int z, int w) {
@@ -1589,7 +1085,7 @@ int get_block(int x, int y, int z) {
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         Map *map = &chunk->map;
-        return map_get(map, x, y, z);
+        return p_map_get(map, x, y, z);
     }
     return 0;
 }
@@ -1598,7 +1094,7 @@ void builder_block(int x, int y, int z, int w) {
     if (y <= 0 || y >= 256) {
         return;
     }
-    if (is_destructable(get_block(x, y, z))) {
+    if (g_item_is_destructable(get_block(x, y, z))) {
         set_block(x, y, z, 0);
     }
     if (w) {
@@ -1614,11 +1110,11 @@ int render_chunks(Attrib *attrib, Player *player) {
     int q = chunked(s->z);
     float light = get_daylight();
     float matrix[16];
-    set_matrix_3d(
+    g_mat_set_3d(
         matrix, g->width, g->height,
         s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->render_radius);
     float planes[6][4];
-    frustum_planes(planes, g->render_radius, matrix);
+    g_mat_frustum_planes(planes, g->render_radius, matrix);
     glUseProgram(attrib->program);
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
     glUniform3f(attrib->camera, s->x, s->y, s->z);
@@ -1649,11 +1145,11 @@ void render_signs(Attrib *attrib, Player *player) {
     int p = chunked(s->x);
     int q = chunked(s->z);
     float matrix[16];
-    set_matrix_3d(
+    g_mat_set_3d(
         matrix, g->width, g->height,
         s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->render_radius);
     float planes[6][4];
-    frustum_planes(planes, g->render_radius, matrix);
+    g_mat_frustum_planes(planes, g->render_radius, matrix);
     glUseProgram(attrib->program);
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
     glUniform1i(attrib->sampler, 3);
@@ -1682,7 +1178,7 @@ void render_sign(Attrib *attrib, Player *player) {
     }
     State *s = &player->state;
     float matrix[16];
-    set_matrix_3d(
+    g_mat_set_3d(
         matrix, g->width, g->height,
         s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->render_radius);
     glUseProgram(attrib->program);
@@ -1692,17 +1188,17 @@ void render_sign(Attrib *attrib, Player *player) {
     char text[MAX_SIGN_LENGTH];
     strncpy(text, g->typing_buffer + 1, MAX_SIGN_LENGTH);
     text[MAX_SIGN_LENGTH - 1] = '\0';
-    GLfloat *data = malloc_faces(5, strlen(text));
+    GLfloat *data = m_util_faces_malloc(5, strlen(text));
     int length = _gen_sign_buffer(data, x, y, z, face, text);
-    GLuint buffer = gen_faces(5, length, data);
+    GLuint buffer = m_util_faces_gen(5, length, data);
     draw_sign(attrib, buffer, length);
-    del_buffer(buffer);
+    m_util_buffer_del(buffer);
 }
 
 void render_players(Attrib *attrib, Player *player) {
     State *s = &player->state;
     float matrix[16];
-    set_matrix_3d(
+    g_mat_set_3d(
         matrix, g->width, g->height,
         s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->render_radius);
     glUseProgram(attrib->program);
@@ -1721,7 +1217,7 @@ void render_players(Attrib *attrib, Player *player) {
 void render_sky(Attrib *attrib, Player *player, GLuint buffer) {
     State *s = &player->state;
     float matrix[16];
-    set_matrix_3d(
+    g_mat_set_3d(
         matrix, g->width, g->height,
         0, 0, 0, s->rx, s->ry, g->fov, 0, g->render_radius);
     glUseProgram(attrib->program);
@@ -1734,54 +1230,54 @@ void render_sky(Attrib *attrib, Player *player, GLuint buffer) {
 void render_wireframe(Attrib *attrib, Player *player) {
     State *s = &player->state;
     float matrix[16];
-    set_matrix_3d(
+    g_mat_set_3d(
         matrix, g->width, g->height,
         s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->render_radius);
     int hx, hy, hz;
     int hw = hit_test(0, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    if (is_obstacle(hw)) {
+    if (g_item_is_obstacle(hw)) {
         glUseProgram(attrib->program);
         glLineWidth(1);
         glEnable(GL_COLOR_LOGIC_OP);
         glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
         GLuint wireframe_buffer = gen_wireframe_buffer(hx, hy, hz, 0.53);
         draw_lines(attrib, wireframe_buffer, 3, 24);
-        del_buffer(wireframe_buffer);
+        m_util_buffer_del(wireframe_buffer);
         glDisable(GL_COLOR_LOGIC_OP);
     }
 }
 
 void render_crosshairs(Attrib *attrib) {
     float matrix[16];
-    set_matrix_2d(matrix, g->width, g->height);
+    g_mat_set_2d(matrix, g->width, g->height);
     glUseProgram(attrib->program);
     glLineWidth(4 * g->scale);
     glEnable(GL_COLOR_LOGIC_OP);
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
     GLuint crosshair_buffer = gen_crosshair_buffer();
     draw_lines(attrib, crosshair_buffer, 2, 4);
-    del_buffer(crosshair_buffer);
+    m_util_buffer_del(crosshair_buffer);
     glDisable(GL_COLOR_LOGIC_OP);
 }
 
 void render_item(Attrib *attrib) {
     float matrix[16];
-    set_matrix_item(matrix, g->width, g->height, g->scale);
+    g_mat_matrix_set_item(matrix, g->width, g->height, g->scale);
     glUseProgram(attrib->program);
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
     glUniform3f(attrib->camera, 0, 0, 5);
     glUniform1i(attrib->sampler, 0);
     glUniform1f(attrib->timer, time_of_day());
     int w = items[g->item_index];
-    if (is_plant(w)) {
+    if (g_item_is_plant(w)) {
         GLuint buffer = gen_plant_buffer(0, 0, 0, 0.5, w);
         draw_plant(attrib, buffer);
-        del_buffer(buffer);
+        m_util_buffer_del(buffer);
     }
     else {
         GLuint buffer = gen_cube_buffer(0, 0, 0, 0.5, w);
         draw_cube(attrib, buffer);
-        del_buffer(buffer);
+        m_util_buffer_del(buffer);
     }
 }
 
@@ -1789,7 +1285,7 @@ void render_text(
     Attrib *attrib, int justify, float x, float y, float n, char *text)
 {
     float matrix[16];
-    set_matrix_2d(matrix, g->width, g->height);
+    g_mat_set_2d(matrix, g->width, g->height);
     glUseProgram(attrib->program);
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
     glUniform1i(attrib->sampler, 1);
@@ -1798,7 +1294,7 @@ void render_text(
     x -= n * justify * (length - 1) / 2;
     GLuint buffer = gen_text_buffer(x, y, n, text);
     draw_text(attrib, buffer, length);
-    del_buffer(buffer);
+    m_util_buffer_del(buffer);
 }
 
 void add_message(const char *text) {
@@ -1806,29 +1302,6 @@ void add_message(const char *text) {
     snprintf(
         g->messages[g->message_index], MAX_TEXT_LENGTH, "%s", text);
     g->message_index = (g->message_index + 1) % MAX_MESSAGES;
-}
-
-void login() {
-    char username[128] = {0};
-    char identity_token[128] = {0};
-    char access_token[128] = {0};
-    if (db_auth_get_selected(username, 128, identity_token, 128)) {
-        printf("Contacting login server for username: %s\n", username);
-        if (get_access_token(
-            access_token, 128, username, identity_token))
-        {
-            printf("Successfully authenticated with the login server\n");
-            client_login(username, access_token);
-        }
-        else {
-            printf("Failed to authenticate with the login server\n");
-            client_login("", "");
-        }
-    }
-    else {
-        printf("Logging in anonymously\n");
-        client_login("", "");
-    }
 }
 
 void copy() {
@@ -2026,17 +1499,17 @@ void parse_command(const char *buffer, int forward) {
     char filename[MAX_PATH_LENGTH];
     int radius, count, xc, yc, zc;
     if (sscanf(buffer, "/identity %128s %128s", username, token) == 2) {
-        db_auth_set(username, token);
+        d_db_auth_set(username, token);
         add_message("Successfully imported identity token!");
-        login();
+        n_auth_login();
     }
     else if (strcmp(buffer, "/logout") == 0) {
-        db_auth_select_none();
-        login();
+        d_db_auth_select_none();
+        n_auth_login();
     }
     else if (sscanf(buffer, "/login %128s", username) == 1) {
-        if (db_auth_select(username)) {
-            login();
+        if (d_db_auth_select(username)) {
+            n_auth_login();
         }
         else {
             add_message("Unknown username.");
@@ -2049,18 +1522,18 @@ void parse_command(const char *buffer, int forward) {
         g->mode = MODE_ONLINE;
         strncpy(g->server_addr, server_addr, MAX_ADDR_LENGTH);
         g->server_port = server_port;
-        snprintf(g->db_path, MAX_PATH_LENGTH,
+        snprintf(g->d_db_path, MAX_PATH_LENGTH,
             "cache.%s.%d.db", g->server_addr, g->server_port);
     }
     else if (sscanf(buffer, "/offline %128s", filename) == 1) {
         g->mode_changed = 1;
         g->mode = MODE_OFFLINE;
-        snprintf(g->db_path, MAX_PATH_LENGTH, "%s.db", filename);
+        snprintf(g->d_db_path, MAX_PATH_LENGTH, "%s.db", filename);
     }
     else if (strcmp(buffer, "/offline") == 0) {
         g->mode_changed = 1;
         g->mode = MODE_OFFLINE;
-        snprintf(g->db_path, MAX_PATH_LENGTH, "%s", DB_PATH);
+        snprintf(g->d_db_path, MAX_PATH_LENGTH, "%s", DB_PATH);
     }
     else if (sscanf(buffer, "/view %d", &radius) == 1) {
         if (radius >= 1 && radius <= 24) {
@@ -2124,7 +1597,7 @@ void parse_command(const char *buffer, int forward) {
         cylinder(&g->block0, &g->block1, radius, 0);
     }
     else if (forward) {
-        client_talk(buffer);
+        n_client_talk(buffer);
     }
 }
 
@@ -2132,7 +1605,7 @@ void on_light() {
     State *s = &g->players->state;
     int hx, hy, hz;
     int hw = hit_test(0, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    if (hy > 0 && hy < 256 && is_destructable(hw)) {
+    if (hy > 0 && hy < 256 && g_item_is_destructable(hw)) {
         toggle_light(hx, hy, hz);
     }
 }
@@ -2141,10 +1614,10 @@ void on_left_click() {
     State *s = &g->players->state;
     int hx, hy, hz;
     int hw = hit_test(0, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    if (hy > 0 && hy < 256 && is_destructable(hw)) {
+    if (hy > 0 && hy < 256 && g_item_is_destructable(hw)) {
         set_block(hx, hy, hz, 0);
         record_block(hx, hy, hz, 0);
-        if (is_plant(get_block(hx, hy + 1, hz))) {
+        if (g_item_is_plant(get_block(hx, hy + 1, hz))) {
             set_block(hx, hy + 1, hz, 0);
         }
     }
@@ -2154,7 +1627,7 @@ void on_right_click() {
     State *s = &g->players->state;
     int hx, hy, hz;
     int hw = hit_test(1, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    if (hy > 0 && hy < 256 && is_obstacle(hw)) {
+    if (hy > 0 && hy < 256 && g_item_is_obstacle(hw)) {
         if (!player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
             set_block(hx, hy, hz, items[g->item_index]);
             record_block(hx, hy, hz, items[g->item_index]);
@@ -2222,7 +1695,7 @@ void on_key(GLFWwindow *window, int key, int scancode, int action, int mods) {
                     parse_command(g->typing_buffer, 1);
                 }
                 else {
-                    client_talk(g->typing_buffer);
+                    n_client_talk(g->typing_buffer);
                 }
             }
         }
@@ -2360,119 +1833,11 @@ void on_mouse_button(GLFWwindow *window, int button, int action, int mods) {
     }
 }
 
-void create_window() {
-    int window_width = WINDOW_WIDTH;
-    int window_height = WINDOW_HEIGHT;
-    GLFWmonitor *monitor = NULL;
-    if (FULLSCREEN) {
-        int mode_count;
-        monitor = glfwGetPrimaryMonitor();
-        const GLFWvidmode *modes = glfwGetVideoModes(monitor, &mode_count);
-        window_width = modes[mode_count - 1].width;
-        window_height = modes[mode_count - 1].height;
-    }
-    g->window = glfwCreateWindow(
-        window_width, window_height, "Craft", monitor, NULL);
-}
-
-void handle_mouse_input() {
-    int exclusive =
-        glfwGetInputMode(g->window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED;
-    static double px = 0;
-    static double py = 0;
-    State *s = &g->players->state;
-    if (exclusive && (px || py)) {
-        double mx, my;
-        glfwGetCursorPos(g->window, &mx, &my);
-        float m = 0.0025;
-        s->rx += (mx - px) * m;
-        if (INVERT_MOUSE) {
-            s->ry += (my - py) * m;
-        }
-        else {
-            s->ry -= (my - py) * m;
-        }
-        if (s->rx < 0) {
-            s->rx += RADIANS(360);
-        }
-        if (s->rx >= RADIANS(360)){
-            s->rx -= RADIANS(360);
-        }
-        s->ry = MAX(s->ry, -RADIANS(90));
-        s->ry = MIN(s->ry, RADIANS(90));
-        px = mx;
-        py = my;
-    }
-    else {
-        glfwGetCursorPos(g->window, &px, &py);
-    }
-}
-
-void handle_movement(double dt) {
-    static float dy = 0;
-    State *s = &g->players->state;
-    int sz = 0;
-    int sx = 0;
-    if (!g->typing) {
-        float m = dt * 1.0;
-        g->ortho = glfwGetKey(g->window, CRAFT_KEY_ORTHO) ? 64 : 0;
-        g->fov = glfwGetKey(g->window, CRAFT_KEY_ZOOM) ? 15 : 65;
-        if (glfwGetKey(g->window, CRAFT_KEY_FORWARD)) sz--;
-        if (glfwGetKey(g->window, CRAFT_KEY_BACKWARD)) sz++;
-        if (glfwGetKey(g->window, CRAFT_KEY_LEFT)) sx--;
-        if (glfwGetKey(g->window, CRAFT_KEY_RIGHT)) sx++;
-        if (glfwGetKey(g->window, GLFW_KEY_LEFT)) s->rx -= m;
-        if (glfwGetKey(g->window, GLFW_KEY_RIGHT)) s->rx += m;
-        if (glfwGetKey(g->window, GLFW_KEY_UP)) s->ry += m;
-        if (glfwGetKey(g->window, GLFW_KEY_DOWN)) s->ry -= m;
-    }
-    float vx, vy, vz;
-    get_motion_vector(g->flying, sz, sx, s->rx, s->ry, &vx, &vy, &vz);
-    if (!g->typing) {
-        if (glfwGetKey(g->window, CRAFT_KEY_JUMP)) {
-            if (g->flying) {
-                vy = 1;
-            }
-            else if (dy == 0) {
-                dy = 8;
-            }
-        }
-    }
-    float speed = g->flying ? 20 : 5;
-    int estimate = roundf(sqrtf(
-        powf(vx * speed, 2) +
-        powf(vy * speed + ABS(dy) * 2, 2) +
-        powf(vz * speed, 2)) * dt * 8);
-    int step = MAX(8, estimate);
-    float ut = dt / step;
-    vx = vx * ut * speed;
-    vy = vy * ut * speed;
-    vz = vz * ut * speed;
-    for (int i = 0; i < step; i++) {
-        if (g->flying) {
-            dy = 0;
-        }
-        else {
-            dy -= ut * 25;
-            dy = MAX(dy, -250);
-        }
-        s->x += vx;
-        s->y += vy + dy * ut;
-        s->z += vz;
-        if (collide(2, &s->x, &s->y, &s->z)) {
-            dy = 0;
-        }
-    }
-    if (s->y < 0) {
-        s->y = highest_block(s->x, s->z) + 2;
-    }
-}
-
 void parse_buffer(char *buffer) {
     Player *me = g->players;
     State *s = &g->players->state;
     char *key;
-    char *line = tokenize(buffer, "\n", &key);
+    char *line = m_util_tokenize(buffer, "\n", &key);
     while (line) {
         int pid;
         float ux, uy, uz, urx, ury;
@@ -2522,7 +1887,7 @@ void parse_buffer(char *buffer) {
         }
         int kp, kq, kk;
         if (sscanf(line, "K,%d,%d,%d", &kp, &kq, &kk) == 3) {
-            db_set_key(kp, kq, kk);
+            d_db_set_key(kp, kq, kk);
         }
         if (sscanf(line, "R,%d,%d", &kp, &kq) == 2) {
             Chunk *chunk = find_chunk(kp, kq);
@@ -2561,7 +1926,7 @@ void parse_buffer(char *buffer) {
         {
             _set_sign(bp, bq, bx, by, bz, face, text, 0);
         }
-        line = tokenize(NULL, "\n", &key);
+        line = m_util_tokenize(NULL, "\n", &key);
     }
 }
 
@@ -2584,146 +1949,39 @@ void reset_model() {
 }
 
 int main(int argc, char **argv) {
-    // INITIALIZATION //
-    curl_global_init(CURL_GLOBAL_DEFAULT);
-    srand(time(NULL));
-    rand();
-
-    // WINDOW INITIALIZATION //
-    if (!glfwInit()) {
-        return -1;
-    }
-    create_window();
-    if (!g->window) {
-        glfwTerminate();
-        return -1;
-    }
-
-    glfwMakeContextCurrent(g->window);
-    glfwSwapInterval(VSYNC);
-    glfwSetInputMode(g->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    glfwSetKeyCallback(g->window, on_key);
-    glfwSetCharCallback(g->window, on_char);
-    glfwSetMouseButtonCallback(g->window, on_mouse_button);
-    glfwSetScrollCallback(g->window, on_scroll);
-
-    if (glewInit() != GLEW_OK) {
-        return -1;
-    }
-
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-    glLogicOp(GL_INVERT);
-    glClearColor(0, 0, 0, 1);
-
-    // LOAD TEXTURES //
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    load_png_texture("textures/texture.png");
-
-    GLuint font;
-    glGenTextures(1, &font);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, font);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    load_png_texture("textures/font.png");
-
-    GLuint sky;
-    glGenTextures(1, &sky);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, sky);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    load_png_texture("textures/sky.png");
-
-    GLuint sign;
-    glGenTextures(1, &sign);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, sign);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    load_png_texture("textures/sign.png");
-
-    // LOAD SHADERS //
-    Attrib block_attrib = {0};
-    Attrib line_attrib = {0};
-    Attrib text_attrib = {0};
-    Attrib sky_attrib = {0};
-    GLuint program;
-
-    program = load_program(
-        "shaders/block_vertex.glsl", "shaders/block_fragment.glsl");
-    block_attrib.program = program;
-    block_attrib.position = glGetAttribLocation(program, "position");
-    block_attrib.normal = glGetAttribLocation(program, "normal");
-    block_attrib.uv = glGetAttribLocation(program, "uv");
-    block_attrib.matrix = glGetUniformLocation(program, "matrix");
-    block_attrib.sampler = glGetUniformLocation(program, "sampler");
-    block_attrib.extra1 = glGetUniformLocation(program, "sky_sampler");
-    block_attrib.extra2 = glGetUniformLocation(program, "daylight");
-    block_attrib.extra3 = glGetUniformLocation(program, "fog_distance");
-    block_attrib.extra4 = glGetUniformLocation(program, "ortho");
-    block_attrib.camera = glGetUniformLocation(program, "camera");
-    block_attrib.timer = glGetUniformLocation(program, "timer");
-
-    program = load_program(
-        "shaders/line_vertex.glsl", "shaders/line_fragment.glsl");
-    line_attrib.program = program;
-    line_attrib.position = glGetAttribLocation(program, "position");
-    line_attrib.matrix = glGetUniformLocation(program, "matrix");
-
-    program = load_program(
-        "shaders/text_vertex.glsl", "shaders/text_fragment.glsl");
-    text_attrib.program = program;
-    text_attrib.position = glGetAttribLocation(program, "position");
-    text_attrib.uv = glGetAttribLocation(program, "uv");
-    text_attrib.matrix = glGetUniformLocation(program, "matrix");
-    text_attrib.sampler = glGetUniformLocation(program, "sampler");
-    text_attrib.extra1 = glGetUniformLocation(program, "is_sign");
-
-    program = load_program(
-        "shaders/sky_vertex.glsl", "shaders/sky_fragment.glsl");
-    sky_attrib.program = program;
-    sky_attrib.position = glGetAttribLocation(program, "position");
-    sky_attrib.normal = glGetAttribLocation(program, "normal");
-    sky_attrib.uv = glGetAttribLocation(program, "uv");
-    sky_attrib.matrix = glGetUniformLocation(program, "matrix");
-    sky_attrib.sampler = glGetUniformLocation(program, "sampler");
-    sky_attrib.timer = glGetUniformLocation(program, "timer");
-
     // CHECK COMMAND LINE ARGUMENTS //
     if (argc == 2 || argc == 3) {
         g->mode = MODE_ONLINE;
         strncpy(g->server_addr, argv[1], MAX_ADDR_LENGTH);
         g->server_port = argc == 3 ? atoi(argv[2]) : DEFAULT_PORT;
-        snprintf(g->db_path, MAX_PATH_LENGTH,
+        snprintf(g->d_db_path, MAX_PATH_LENGTH,
             "cache.%s.%d.db", g->server_addr, g->server_port);
-    }
-    else {
+    } else {
         g->mode = MODE_OFFLINE;
-        snprintf(g->db_path, MAX_PATH_LENGTH, "%s", DB_PATH);
+        snprintf(g->d_db_path, MAX_PATH_LENGTH, "%s", DB_PATH);
     }
 
-    g->create_radius = CREATE_CHUNK_RADIUS;
-    g->render_radius = RENDER_CHUNK_RADIUS;
-    g->delete_radius = DELETE_CHUNK_RADIUS;
-    g->sign_radius = RENDER_SIGN_RADIUS;
+    Attrib block_attrib = {0};
+    Attrib line_attrib = {0};
+    Attrib text_attrib = {0};
+    Attrib sky_attrib = {0};
 
-    // INITIALIZE WORKER THREADS
-    for (int i = 0; i < WORKERS; i++) {
-        Worker *worker = g->workers + i;
-        worker->index = i;
-        worker->state = WORKER_IDLE;
-        mtx_init(&worker->mtx, mtx_plain);
-        cnd_init(&worker->cnd);
-        thrd_create(&worker->thrd, worker_run, worker);
+    // @todo -> Move callbacks to m_game instead of passing here
+    int init = m_game_init(
+        &model,
+        on_key,
+        on_char,
+        on_mouse_button,
+        on_scroll,
+        &block_attrib,
+        &line_attrib,
+        &text_attrib,
+        &sky_attrib
+    );
+
+    // Non-zero return, end here.
+    if (init != 0) {
+        return init;
     }
 
     // OUTER LOOP //
@@ -2731,23 +1989,23 @@ int main(int argc, char **argv) {
     while (running) {
         // DATABASE INITIALIZATION //
         if (g->mode == MODE_OFFLINE || USE_CACHE) {
-            db_enable();
-            if (db_init(g->db_path)) {
+            d_db_enable();
+            if (d_db_init(g->d_db_path)) {
                 return -1;
             }
             if (g->mode == MODE_ONLINE) {
                 // TODO: support proper caching of signs (handle deletions)
-                db_delete_all_signs();
+                d_db_delete_all_signs();
             }
         }
 
         // CLIENT INITIALIZATION //
         if (g->mode == MODE_ONLINE) {
-            client_enable();
-            client_connect(g->server_addr, g->server_port);
-            client_start();
-            client_version(1);
-            login();
+            n_client_enable();
+            n_client_connect(g->server_addr, g->server_port);
+            n_client_start();
+            n_client_version(1);
+            n_auth_login();
         }
 
         // LOCAL VARIABLES //
@@ -2765,7 +2023,7 @@ int main(int argc, char **argv) {
         g->player_count = 1;
 
         // LOAD STATE FROM DATABASE //
-        int loaded = db_load_state(&s->x, &s->y, &s->z, &s->rx, &s->ry);
+        int loaded = d_db_load_state(&s->x, &s->y, &s->z, &s->rx, &s->ry);
         force_chunks(me);
         if (!loaded) {
             s->y = highest_block(s->x, s->z) + 2;
@@ -2786,21 +2044,17 @@ int main(int argc, char **argv) {
                 last_update = glfwGetTime();
                 memset(&fps, 0, sizeof(fps));
             }
-            update_fps(&fps);
+            m_util_fps_update(&fps);
             double now = glfwGetTime();
             double dt = now - previous;
             dt = MIN(dt, 0.2);
             dt = MAX(dt, 0.0);
             previous = now;
 
-            // HANDLE MOUSE INPUT //
-            handle_mouse_input();
-
-            // HANDLE MOVEMENT //
-            handle_movement(dt);
+            m_game_update(dt);
 
             // HANDLE DATA FROM SERVER //
-            char *buffer = client_recv();
+            char *buffer = n_client_recv();
             if (buffer) {
                 parse_buffer(buffer);
                 free(buffer);
@@ -2809,30 +2063,20 @@ int main(int argc, char **argv) {
             // FLUSH DATABASE //
             if (now - last_commit > COMMIT_INTERVAL) {
                 last_commit = now;
-                db_commit();
+                d_db_commit();
             }
 
             // SEND POSITION TO SERVER //
             if (now - last_update > 0.1) {
                 last_update = now;
-                client_position(s->x, s->y, s->z, s->rx, s->ry);
+                n_client_position(s->x, s->y, s->z, s->rx, s->ry);
             }
 
             // PREPARE TO RENDER //
-            g->observe1 = g->observe1 % g->player_count;
-            g->observe2 = g->observe2 % g->player_count;
-            delete_chunks();
-            del_buffer(me->buffer);
-            me->buffer = gen_player_buffer(s->x, s->y, s->z, s->rx, s->ry);
-            for (int i = 1; i < g->player_count; i++) {
-                interpolate_player(g->players + i);
-            }
+            m_game_render();
             Player *player = g->players + g->observe1;
 
             // RENDER 3-D SCENE //
-            glClear(GL_COLOR_BUFFER_BIT);
-            glClear(GL_DEPTH_BUFFER_BIT);
-            render_sky(&sky_attrib, player, sky_buffer);
             glClear(GL_DEPTH_BUFFER_BIT);
             int face_count = render_chunks(&block_attrib, player);
             render_signs(&text_attrib, player);
@@ -2947,12 +2191,12 @@ int main(int argc, char **argv) {
         }
 
         // SHUTDOWN //
-        db_save_state(s->x, s->y, s->z, s->rx, s->ry);
-        db_close();
-        db_disable();
-        client_stop();
-        client_disable();
-        del_buffer(sky_buffer);
+        d_db_save_state(s->x, s->y, s->z, s->rx, s->ry);
+        d_db_close();
+        d_db_disable();
+        n_client_stop();
+        n_client_disable();
+        m_util_buffer_del(sky_buffer);
         delete_all_chunks();
         delete_all_players();
     }

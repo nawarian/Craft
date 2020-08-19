@@ -1,5 +1,5 @@
-#include "item.h"
-#include "util.h"
+#include "g_item.h"
+#include "m_util.h"
 
 const int items[] = {
     // items the user can build
@@ -141,7 +141,7 @@ const int plants[256] = {
     54, // 23 - blue flower
 };
 
-int is_plant(int w) {
+int g_item_is_plant(int w) {
     switch (w) {
         case TALL_GRASS:
         case YELLOW_FLOWER:
@@ -156,9 +156,9 @@ int is_plant(int w) {
     }
 }
 
-int is_obstacle(int w) {
+int g_item_is_obstacle(int w) {
     w = ABS(w);
-    if (is_plant(w)) {
+    if (g_item_is_plant(w)) {
         return 0;
     }
     switch (w) {
@@ -170,12 +170,12 @@ int is_obstacle(int w) {
     }
 }
 
-int is_transparent(int w) {
+int g_item_is_transparent(int w) {
     if (w == EMPTY) {
         return 1;
     }
     w = ABS(w);
-    if (is_plant(w)) {
+    if (g_item_is_plant(w)) {
         return 1;
     }
     switch (w) {
@@ -188,7 +188,7 @@ int is_transparent(int w) {
     }
 }
 
-int is_destructable(int w) {
+int g_item_is_destructable(int w) {
     switch (w) {
         case EMPTY:
         case CLOUD:
