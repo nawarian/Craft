@@ -13,6 +13,7 @@
 #include "d_db.h"
 #include "g_cube.h"
 #include "g_item.h"
+#include "g_matrix.h"
 #include "p_world.h"
 
 #define XZ_SIZE (CHUNK_SIZE * 3 + 2)
@@ -29,6 +30,8 @@ static Attrib *block_attrib;
 static Attrib *line_attrib;
 static Attrib *text_attrib;
 static Attrib *sky_attrib;
+
+GLuint sky_buffer; 
 
 void _create_window() {
     int window_width = WINDOW_WIDTH;
@@ -486,6 +489,11 @@ int m_game_init(
         thrd_create(&worker->thrd, _worker_run, worker);
     }
 
+    // Initialize sky_buffer
+    float sky_buffer_data[12288];
+    g_cube_make_sphere(sky_buffer_data, 1, 3);
+    sky_buffer = m_util_buffer_gen(sizeof(sky_buffer_data), sky_buffer_data);
+
     return 0;
 }
 
@@ -806,6 +814,53 @@ void _interpolate_player(Player *player) {
         0);
 }
 
+float _time_of_day() {
+    if (g->day_length <= 0) {
+        return 0.5;
+    }
+
+    float t;
+    t = glfwGetTime();
+    t = t / g->day_length;
+    t = t - (int)t;
+
+    return t;
+}
+
+void _draw_triangles_3d(Attrib *attrib, GLuint buffer, int count) {
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+    glEnableVertexAttribArray(attrib->position);
+    glEnableVertexAttribArray(attrib->normal);
+    glEnableVertexAttribArray(attrib->uv);
+    glVertexAttribPointer(attrib->position, 3, GL_FLOAT, GL_FALSE,
+        sizeof(GLfloat) * 8, 0);
+    glVertexAttribPointer(attrib->normal, 3, GL_FLOAT, GL_FALSE,
+        sizeof(GLfloat) * 8, (GLvoid *)(sizeof(GLfloat) * 3));
+    glVertexAttribPointer(attrib->uv, 2, GL_FLOAT, GL_FALSE,
+        sizeof(GLfloat) * 8, (GLvoid *)(sizeof(GLfloat) * 6));
+    glDrawArrays(GL_TRIANGLES, 0, count);
+    glDisableVertexAttribArray(attrib->position);
+    glDisableVertexAttribArray(attrib->normal);
+    glDisableVertexAttribArray(attrib->uv);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+}
+
+void _render_sky(Attrib *attrib, Player *player, GLuint buffer) {
+    State *s = &player->state;
+    float matrix[16];
+    g_mat_set_3d(
+        matrix, g->width, g->height,
+        0, 0, 0, s->rx, s->ry, g->fov, 0, g->render_radius
+    );
+
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    glUniform1i(attrib->sampler, 2);
+    glUniform1f(attrib->timer, _time_of_day());
+    _draw_triangles_3d(attrib, buffer, 512 * 3);
+}
+
 void m_game_render() {
     State *s = &g->players->state;
     Player *me = g->players;
@@ -824,6 +879,11 @@ void m_game_render() {
     Player *player = g->players + g->observe1;
 
     // Render 3D scene
+    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    _render_sky(sky_attrib, player, sky_buffer);
+    glClear(GL_DEPTH_BUFFER_BIT);
     // Render HUD
     // Render Text
     // Render Picture in Picture
